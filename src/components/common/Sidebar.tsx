@@ -1,14 +1,24 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Clock, Gift, LogOut, Home,
-  FileText, ChevronRight,
+  FileText, ChevronRight, BookCheck, Target
 } from 'lucide-react';
+import { useCurrentUser, useLogout } from '../../hooks/useAuth';
 import logo from '../../assets/logo.png';
 
-const Sidebar = ({ user, activeTab, setActiveTab, onLogout }: any) => {
+interface SidebarProps {
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+}
+
+const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
+  const { data: user, isLoading } = useCurrentUser();
+  const logoutMutation = useLogout();
+
   const employerTabs = [
     { id: 'dashboard', icon: Home, label: 'Dashboard' },
     { id: 'employees', icon: Users, label: 'Employees' },
+    { id: 'tasks', icon: Target, label: 'Task Management' },
     { id: 'leaves', icon: FileText, label: 'Leave Requests' },
     { id: 'attendance', icon: Clock, label: 'Attendance' },
     { id: 'birthdays', icon: Gift, label: 'Birthdays' },
@@ -18,34 +28,34 @@ const Sidebar = ({ user, activeTab, setActiveTab, onLogout }: any) => {
     { id: 'dashboard', icon: Home, label: 'Dashboard' },
     { id: 'my-leaves', icon: FileText, label: 'My Leaves' },
     { id: 'my-attendance', icon: Clock, label: 'My Attendance' },
+    { id: 'taskmanagement', icon: BookCheck, label: 'Task Management' },
     { id: 'birthdays', icon: Gift, label: 'Birthdays' },
   ];
 
-  const tabs = user.role === 'employer' ? employerTabs : employeeTabs;
+  const tabs = user?.role === 'employer' ? employerTabs : employeeTabs;
 
-  const handleLogout = () => {
-    // Clear ALL session data from storage
-    localStorage.removeItem('hrms_session');
-    localStorage.removeItem('remembered_email');
-    sessionStorage.removeItem('hrms_session');
-    sessionStorage.removeItem('remembered_email');
-
-    // Clear any other potential session data
-    const keysToRemove = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.includes('hrms') || key && key.includes('auth')) {
-        keysToRemove.push(key);
-      }
+  const handleLogout = async () => {
+    try {
+      await logoutMutation.mutateAsync();
+      // After logout, force a reload to go back to login page
+      window.location.reload();
+    } catch (error) {
+      console.error('Logout failed:', error);
     }
-    keysToRemove.forEach(key => localStorage.removeItem(key));
-
-    // Show logout confirmation
-    console.log('User logged out successfully');
-
-    // Call the parent logout function
-    onLogout();
   };
+
+  // Show loading state
+  if (isLoading || !user) {
+    return (
+      <motion.div
+        initial={{ x: -100, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        className="w-64 bg-gradient-to-b from-[#2C3E50] via-[#34495E] to-[#1A252F] min-h-screen p-4 flex items-center justify-center"
+      >
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -110,7 +120,7 @@ const Sidebar = ({ user, activeTab, setActiveTab, onLogout }: any) => {
                 </motion.div>
 
                 {/* Label */}
-                <span className="font-medium">{tab.label}</span>
+                <span className="font-medium whitespace-nowrap">{tab.label}</span>
 
                 {/* Active chevron */}
                 {isActive && (
@@ -145,7 +155,7 @@ const Sidebar = ({ user, activeTab, setActiveTab, onLogout }: any) => {
             whileTap={{ scale: 0.95 }}
             className="relative w-10 h-10 bg-gradient-to-br from-[#6B8DA2] to-[#F5A42C] rounded-full flex items-center justify-center text-white text-sm font-semibold shadow-lg"
           >
-            {user.name.split(' ').map((n: string) => n[0]).join('')}
+            {user.avatar || user.name.split(' ').map((n: string) => n[0]).join('')}
           </motion.div>
 
           <div className="flex-1 min-w-0">
@@ -170,10 +180,17 @@ const Sidebar = ({ user, activeTab, setActiveTab, onLogout }: any) => {
           }}
           whileTap={{ scale: 0.98 }}
           onClick={handleLogout}
-          className="group w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-red-400 rounded-lg transition-all duration-200 border border-transparent hover:border-red-500/30"
+          disabled={logoutMutation.isPending}
+          className="group w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-red-400 rounded-lg transition-all duration-200 border border-transparent hover:border-red-500/30 disabled:opacity-50"
         >
-          <LogOut className="w-5 h-5" />
-          <span className="font-medium">Logout</span>
+          {logoutMutation.isPending ? (
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-400"></div>
+          ) : (
+            <LogOut className="w-5 h-5" />
+          )}
+          <span className="font-medium">
+            {logoutMutation.isPending ? 'Logging out...' : 'Logout'}
+          </span>
         </motion.button>
       </motion.div>
     </motion.div>

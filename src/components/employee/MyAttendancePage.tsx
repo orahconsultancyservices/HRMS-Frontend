@@ -1,139 +1,432 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Clock, Calendar, Download, Filter, 
-  TrendingUp, BarChart3, CheckCircle, 
-  XCircle, Clock as ClockIcon, CalendarDays,
-  Search, DownloadCloud, FileText,
-  PieChart, LogIn, LogOut, ChevronLeft,
-  ChevronRight, ChevronsLeft, ChevronsRight
+  Clock, Calendar, Download, TrendingUp, BarChart3, 
+  CheckCircle, XCircle, CalendarDays, Search, DownloadCloud, 
+  FileText, PieChart, LogIn, LogOut, ChevronLeft, ChevronRight, Coffee,
+  Filter, List
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-
-// Define types
-interface AttendanceRecord {
-  id: number;
-  date: string;
-  loginTime: string | null;
-  logoutTime: string | null;
-  totalHours: string;
-  status: 'present' | 'absent';
-  breaks: number;
-  dayOfWeek: string;
-}
+import { attendanceApi } from '../../services/api';
 
 interface Employee {
   empId: string;
   name: string;
+  id?: number;
+  employeeId?: string;
 }
 
 interface MyAttendanceProps {
   employee: Employee;
-  attendance: Array<{
-    empId: string;
-    loginTime?: string;
-    logoutTime?: string;
-    status?: string;
-    hours?: string;
-    date?: string;
-  }>;
-  setAttendance: React.Dispatch<React.SetStateAction<any>>;
+}
+
+interface AttendanceRecord {
+  id: number;
+  date: string;
+  checkIn: string | null;
+  checkOut: string | null;
+  totalHours: number | null;
+  status: string;
+  breaks: number;
+  location?: string;
+  notes?: string;
+  day?: string;
 }
 
 type DateRange = [Date | null, Date | null];
 
-const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceProps) => {
-  const [isClocking, setIsClocking] = useState(false);
+const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
+  // Convert empId to number safely
+  const getEmployeeIdNumber = () => {
+    try {
+      if (employee.id) {
+        return parseInt(employee.id.toString());
+      }
+      
+      if (employee.empId) {
+        const parsedId = parseInt(employee.empId);
+        if (!isNaN(parsedId)) {
+          return parsedId;
+        }
+      }
+      
+      const fallbackId = parseInt(employee.empId);
+      return isNaN(fallbackId) ? 1 : fallbackId;
+    } catch (error) {
+      console.error('Error parsing employee ID:', error);
+      return 1;
+    }
+  };
+
+  const employeeIdNumber = getEmployeeIdNumber();
+  
   const [showNotification, setShowNotification] = useState(false);
   const [notification, setNotification] = useState({ message: '', type: '' as 'success' | 'error' | 'info' });
   const [dateRange, setDateRange] = useState<DateRange>([null, null]);
   const [startDate, endDate] = dateRange;
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('daily');
-  const [showBreakModal, setShowBreakModal] = useState(false);
-  const [breakDuration, setBreakDuration] = useState(0);
   
-  // Date navigation states
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedWeek, setSelectedWeek] = useState(0); // 0 = current week
-  const [selectedMonth, setSelectedMonth] = useState(0); // 0 = current month
-  
-  // Demo attendance history data with more dates
-  const generateAttendanceData = () => {
-    const data: AttendanceRecord[] = [];
-    const today = new Date();
-    
-    // Generate 90 days of data
-    for (let i = 0; i < 90; i++) {
-      const date = new Date();
-      date.setDate(today.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'short' });
-      
-      // Skip weekends randomly (approximately 2 days per week)
-      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-      const isAbsent = Math.random() > 0.85; // 15% chance of absence
-      const isPresent = !isWeekend && !isAbsent;
-      
-      if (isPresent) {
-        // Generate realistic login/logout times
-        const loginHour = 8 + Math.floor(Math.random() * 2); // 8-9 AM
-        const loginMinute = Math.floor(Math.random() * 60);
-        const logoutHour = 17 + Math.floor(Math.random() * 2); // 5-6 PM
-        const logoutMinute = Math.floor(Math.random() * 60);
-        
-        const loginTime = `${loginHour.toString().padStart(2, '0')}:${loginMinute.toString().padStart(2, '0')}`;
-        const logoutTime = `${logoutHour.toString().padStart(2, '0')}:${logoutMinute.toString().padStart(2, '0')}`;
-        
-        // Calculate total hours
-        const totalHours = (logoutHour + logoutMinute/60) - (loginHour + loginMinute/60);
-        const hours = Math.floor(totalHours);
-        const minutes = Math.round((totalHours - hours) * 60);
-        const totalHoursStr = `${hours}h ${minutes}m`;
-        
-        data.push({
-          id: i + 1,
-          date: dateStr,
-          loginTime,
-          logoutTime,
-          totalHours: totalHoursStr,
-          status: 'present',
-          breaks: Math.floor(Math.random() * 60) + 15, // 15-75 minutes
-          dayOfWeek
-        });
-      } else {
-        data.push({
-          id: i + 1,
-          date: dateStr,
-          loginTime: null,
-          logoutTime: null,
-          totalHours: '0h',
-          status: 'absent',
-          breaks: 0,
-          dayOfWeek
-        });
-      }
-    }
-    
-    return data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  };
-  
-  const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>(generateAttendanceData());
-  
-  const currentAtt = attendance.find(a => a.empId === employee.empId);
-  const canPunchIn = !currentAtt?.loginTime;
-  const canPunchOut = currentAtt?.loginTime && !currentAtt?.logoutTime;
-  const workCompleted = currentAtt?.loginTime && currentAtt?.logoutTime;
+  const [selectedWeek, setSelectedWeek] = useState(0);
+  const [selectedMonth, setSelectedMonth] = useState(0);
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
-  // Get filtered data based on view mode
+  // State for data
+  const [todayStatus, setTodayStatus] = useState<any>(null);
+  const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>([]);
+  const [breaks, setBreaks] = useState<any[]>([]);
+  const [monthlyAttendance, setMonthlyAttendance] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Today's status
+  const canPunchIn = !todayStatus?.checkIn;
+  const canPunchOut = todayStatus?.checkIn && !todayStatus?.checkOut;
+  const workCompleted = todayStatus?.checkIn && todayStatus?.checkOut;
+  const activeBreak = breaks.find((b: any) => b.status === 'active');
+  const isOnBreak = !!activeBreak;
+
+  // Format time for display
+  const formatTimeForDisplay = (dateTime: string | Date | null | undefined) => {
+    if (!dateTime) return '--:--';
+    try {
+      const date = new Date(dateTime);
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+    } catch (error) {
+      console.error('Error formatting time:', error);
+      return '--:--';
+    }
+  };
+
+  // Format date for display
+  const formatDateForDisplay = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return dateStr;
+    }
+  };
+
+  // Get day name from date
+  const getDayName = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { weekday: 'short' });
+    } catch (error) {
+      return '';
+    }
+  };
+
+  // Format hours for display
+  const formatHoursForDisplay = (hours: number | null | undefined) => {
+    if (!hours || hours === 0) return '--';
+    const totalMinutes = Math.round(hours * 60);
+    const displayHours = Math.floor(totalMinutes / 60);
+    const displayMinutes = totalMinutes % 60;
+    return `${displayHours}h ${displayMinutes}m`;
+  };
+
+  // Fetch today's attendance
+  const fetchTodayAttendance = async () => {
+    try {
+      const response = await attendanceApi.getTodayStatus(employeeIdNumber);
+      console.log('Today attendance response:', response);
+      
+      if (response.success && response.data) {
+        setTodayStatus(response.data);
+      } else {
+        setTodayStatus(null);
+      }
+    } catch (error) {
+      console.error('Error fetching today attendance:', error);
+      setTodayStatus(null);
+    }
+  };
+
+  // Fetch attendance history
+  const fetchAttendanceHistory = async () => {
+    setIsLoadingHistory(true);
+    try {
+      const params: any = {
+        employeeId: employeeIdNumber.toString()
+      };
+
+      if (startDate) params.startDate = startDate.toISOString().split('T')[0];
+      if (endDate) params.endDate = endDate.toISOString().split('T')[0];
+
+      console.log('Fetching attendance history with params:', params);
+
+      const response = await attendanceApi.getAll(params);
+      console.log('Attendance history response:', response);
+      
+      let dataArray = [];
+      
+      // Handle different response structures
+      if (response.success) {
+        if (response.data && response.data.data && Array.isArray(response.data.data)) {
+          dataArray = response.data.data;
+        } 
+        else if (response.data && Array.isArray(response.data)) {
+          dataArray = response.data;
+        }
+        else if (Array.isArray(response)) {
+          dataArray = response;
+        }
+      }
+      
+      // Format the data
+      const formattedHistory = dataArray.map((record: any) => ({
+        id: record.id || 0,
+        date: record.date || '',
+        day: getDayName(record.date || ''),
+        checkIn: record.checkIn || null,
+        checkOut: record.checkOut || null,
+        totalHours: record.totalHours || 0,
+        status: record.status || 'unknown',
+        breaks: record.breaks || 0,
+        location: record.location || '',
+        notes: record.notes || '',
+        dayOfWeek: getDayName(record.date || '')
+      }));
+
+      console.log('Formatted history:', formattedHistory);
+      setAttendanceHistory(formattedHistory);
+      
+    } catch (error) {
+      console.error('Error fetching attendance history:', error);
+      setAttendanceHistory([]);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // Fetch monthly attendance
+  const fetchMonthlyAttendance = async () => {
+    try {
+      const response = await attendanceApi.getByEmployee(employeeIdNumber, {
+        month: currentMonth + 1,
+        year: currentYear
+      });
+      
+      if (response.success) {
+        let dataArray = [];
+        
+        if (response.data && response.data.data && Array.isArray(response.data.data)) {
+          dataArray = response.data.data;
+        } 
+        else if (response.data && Array.isArray(response.data)) {
+          dataArray = response.data;
+        }
+        
+        setMonthlyAttendance(dataArray);
+      } else {
+        setMonthlyAttendance([]);
+      }
+    } catch (error) {
+      console.error('Error fetching monthly attendance:', error);
+      setMonthlyAttendance([]);
+    }
+  };
+
+  // Fetch breaks
+  const fetchBreaks = async () => {
+    try {
+      const response = await attendanceApi.getBreaks(employeeIdNumber);
+      
+      if (response.success && response.data) {
+        setBreaks(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching breaks:', error);
+      setBreaks([]);
+    }
+  };
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchTodayAttendance();
+    fetchAttendanceHistory();
+    fetchMonthlyAttendance();
+    fetchBreaks();
+  }, [employeeIdNumber]);
+
+  // Fetch history when date range changes
+  useEffect(() => {
+    if (startDate || endDate) {
+      fetchAttendanceHistory();
+    }
+  }, [startDate, endDate]);
+
+  // Fetch monthly data when month/year changes
+  useEffect(() => {
+    fetchMonthlyAttendance();
+  }, [currentMonth, currentYear]);
+
+  const showNotificationMessage = (message: string, type: 'success' | 'error' | 'info') => {
+    setNotification({ message, type });
+    setShowNotification(true);
+    setTimeout(() => setShowNotification(false), 3000);
+  };
+
+  const handleClockIn = async () => {
+    setIsLoading(true);
+    try {
+      const response = await attendanceApi.clockIn(employeeIdNumber, {
+        location: 'Office',
+        notes: 'Punched in via web app'
+      });
+
+      if (response.success) {
+        showNotificationMessage('Successfully clocked in! Have a productive day!', 'success');
+        fetchTodayAttendance();
+        fetchAttendanceHistory();
+        fetchMonthlyAttendance();
+      } else {
+        throw new Error(response.message || 'Failed to clock in');
+      }
+    } catch (error: any) {
+      console.error('Error punching in:', error);
+      const errorMessage = error.response?.data?.message 
+        || error.message 
+        || 'Failed to punch in. Please try again.';
+      showNotificationMessage(errorMessage, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleClockOut = async () => {
+    setIsLoading(true);
+    try {
+      const response = await attendanceApi.clockOut(employeeIdNumber, {
+        location: 'Office',
+        notes: 'Punched out via web app'
+      });
+
+      if (response.success) {
+        showNotificationMessage('Successfully clocked out! See you tomorrow!', 'success');
+        fetchTodayAttendance();
+        fetchAttendanceHistory();
+        fetchMonthlyAttendance();
+      } else {
+        throw new Error(response.message || 'Failed to clock out');
+      }
+    } catch (error: any) {
+      console.error('Error punching out:', error);
+      const errorMessage = error.response?.data?.message 
+        || error.message 
+        || 'Failed to punch out. Please try again.';
+      showNotificationMessage(errorMessage, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStartBreak = async () => {
+    setIsLoading(true);
+    try {
+      const response = await attendanceApi.startBreak(employeeIdNumber, {
+        reason: 'Coffee break'
+      });
+
+      if (response.success) {
+        showNotificationMessage('Break started. Enjoy your break! ☕', 'success');
+        fetchBreaks();
+        fetchTodayAttendance();
+      } else {
+        throw new Error(response.message || 'Failed to start break');
+      }
+    } catch (error: any) {
+      console.error('Error starting break:', error);
+      showNotificationMessage(error.response?.data?.message || 'Failed to start break', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEndBreak = async () => {
+    if (!activeBreak) return;
+    
+    setIsLoading(true);
+    try {
+      const response = await attendanceApi.endBreak(employeeIdNumber, activeBreak.id);
+
+      if (response.success) {
+        showNotificationMessage('Break ended!', 'success');
+        fetchBreaks();
+        fetchTodayAttendance();
+      } else {
+        throw new Error(response.message || 'Failed to end break');
+      }
+    } catch (error: any) {
+      console.error('Error ending break:', error);
+      showNotificationMessage(error.response?.data?.message || 'Failed to end break', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTakeBreak = () => {
+    if (isOnBreak) {
+      handleEndBreak();
+    } else {
+      handleStartBreak();
+    }
+  };
+
+  // Format break duration
+  const formatBreakDuration = (minutes: number) => {
+    if (!minutes || minutes === 0) return '0m';
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+
+    if (hours === 0) {
+      return `${mins}m`;
+    } else if (mins === 0) {
+      return `${hours}h`;
+    } else {
+      return `${hours}h ${mins}m`;
+    }
+  };
+
+  const downloadAttendance = () => {
+    showNotificationMessage('Downloading attendance report...', 'info');
+  };
+
+  // Get status badge color
+  const getStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case 'present': return 'bg-green-100 text-green-700';
+      case 'late': return 'bg-yellow-100 text-yellow-700';
+      case 'absent': return 'bg-red-100 text-red-700';
+      case 'half_day': return 'bg-orange-100 text-orange-700';
+      case 'on_leave': return 'bg-purple-100 text-purple-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  // Filter attendance based on view mode
   const getFilteredDataByViewMode = () => {
     const today = new Date(currentDate);
     
     switch (viewMode) {
       case 'daily':
-        return attendanceHistory.filter(record => 
-          record.date === today.toISOString().split('T')[0]
+        return attendanceHistory.filter((record: any) => 
+          new Date(record.date).toDateString() === today.toDateString()
         );
         
       case 'weekly':
@@ -142,16 +435,16 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
         
-        return attendanceHistory.filter(record => {
+        return attendanceHistory.filter((record: any) => {
           const recordDate = new Date(record.date);
           return recordDate >= weekStart && recordDate <= weekEnd;
         });
         
       case 'monthly':
-        const monthStart = new Date(today.getFullYear(), today.getMonth() + selectedMonth, 1);
-        const monthEnd = new Date(today.getFullYear(), today.getMonth() + selectedMonth + 1, 0);
+        const monthStart = new Date(currentYear, currentMonth + selectedMonth, 1);
+        const monthEnd = new Date(currentYear, currentMonth + selectedMonth + 1, 0);
         
-        return attendanceHistory.filter(record => {
+        return attendanceHistory.filter((record: any) => {
           const recordDate = new Date(record.date);
           return recordDate >= monthStart && recordDate <= monthEnd;
         });
@@ -161,45 +454,30 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
     }
   };
 
-  // Filtered attendance based on date range, search, and view mode
-  const filteredAttendance = getFilteredDataByViewMode().filter(record => {
-    const recordDate = new Date(record.date);
-    const matchesDate = (!startDate || recordDate >= startDate) && 
-                       (!endDate || recordDate <= endDate);
+  const filteredAttendance = getFilteredDataByViewMode().filter((record: any) => {
     const matchesSearch = record.date.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          record.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         record.dayOfWeek.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesDate && matchesSearch;
+                         (record.dayOfWeek && record.dayOfWeek.toLowerCase().includes(searchTerm.toLowerCase()));
+    return matchesSearch;
   });
 
-  // Calculate statistics based on filtered data
-  const totalPresent = filteredAttendance.filter(a => a.status === 'present').length;
-  const totalAbsent = filteredAttendance.filter(a => a.status === 'absent').length;
+  // Calculate statistics
+  const totalPresent = filteredAttendance.filter((a: any) => a.status === 'present').length;
+  const totalAbsent = filteredAttendance.filter((a: any) => a.status === 'absent').length;
+  const totalLate = filteredAttendance.filter((a: any) => a.status === 'late').length;
+  const totalHalfDay = filteredAttendance.filter((a: any) => a.status === 'half_day').length;
+  const totalOnLeave = filteredAttendance.filter((a: any) => a.status === 'on_leave').length;
+  
   const averageHours = filteredAttendance
-    .filter(a => a.status === 'present')
-    .reduce((acc, curr) => {
-      const hoursMatch = curr.totalHours.match(/(\d+)h\s*(\d*)m?/);
-      if (hoursMatch) {
-        const hours = parseInt(hoursMatch[1]);
-        const minutes = hoursMatch[2] ? parseInt(hoursMatch[2]) / 60 : 0;
-        return acc + hours + minutes;
-      }
-      return acc;
-    }, 0) / totalPresent || 0;
+    .filter((a: any) => a.status === 'present' || a.status === 'late' || a.status === 'half_day')
+    .reduce((acc: number, curr: any) => acc + (curr.totalHours || 0), 0) / 
+    (totalPresent + totalLate + totalHalfDay) || 0;
   
   const totalWorkHours = filteredAttendance
-    .filter(a => a.status === 'present')
-    .reduce((acc, curr) => {
-      const hoursMatch = curr.totalHours.match(/(\d+)h\s*(\d*)m?/);
-      if (hoursMatch) {
-        const hours = parseInt(hoursMatch[1]);
-        const minutes = hoursMatch[2] ? parseInt(hoursMatch[2]) / 60 : 0;
-        return acc + hours + minutes;
-      }
-      return acc;
-    }, 0);
+    .filter((a: any) => a.status === 'present' || a.status === 'late' || a.status === 'half_day')
+    .reduce((acc: number, curr: any) => acc + (curr.totalHours || 0), 0);
 
-  // Date navigation functions
+  // Date navigation
   const navigateToPreviousDay = () => {
     const newDate = new Date(currentDate);
     newDate.setDate(newDate.getDate() - 1);
@@ -212,29 +490,19 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
     setCurrentDate(newDate);
   };
 
-  const navigateToPreviousWeek = () => {
-    setSelectedWeek(prev => prev - 1);
-  };
-
-  const navigateToNextWeek = () => {
-    setSelectedWeek(prev => prev + 1);
-  };
-
-  const navigateToPreviousMonth = () => {
-    setSelectedMonth(prev => prev - 1);
-  };
-
-  const navigateToNextMonth = () => {
-    setSelectedMonth(prev => prev + 1);
-  };
+  const navigateToPreviousWeek = () => setSelectedWeek(prev => prev - 1);
+  const navigateToNextWeek = () => setSelectedWeek(prev => prev + 1);
+  const navigateToPreviousMonth = () => setSelectedMonth(prev => prev - 1);
+  const navigateToNextMonth = () => setSelectedMonth(prev => prev + 1);
 
   const resetToCurrent = () => {
     setCurrentDate(new Date());
     setSelectedWeek(0);
     setSelectedMonth(0);
+    setCurrentMonth(new Date().getMonth());
+    setCurrentYear(new Date().getFullYear());
   };
 
-  // Get date range display based on view mode
   const getDateRangeDisplay = () => {
     const today = new Date(currentDate);
     
@@ -257,7 +525,7 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
                 ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
         
       case 'monthly':
-        const monthStart = new Date(today.getFullYear(), today.getMonth() + selectedMonth, 1);
+        const monthStart = new Date(currentYear, currentMonth + selectedMonth, 1);
         return monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
         
       default:
@@ -265,89 +533,32 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
     }
   };
 
-  const handleClockIn = () => {
-    setIsClocking(true);
-    setTimeout(() => {
-      const now = new Date();
-      const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-      setAttendance((prev: any[]) => prev.map((a) => a.empId === employee.empId ? { 
-        ...a, 
-        loginTime: time, 
-        status: 'present', 
-        hours: 'Active',
-        date: now.toISOString().split('T')[0]
-      } : a));
-      setIsClocking(false);
-      showNotificationMessage('Successfully clocked in!', 'success');
-    }, 800);
+  const getStatusText = () => {
+    if (workCompleted) return 'Work completed for today! 🎉';
+    if (isOnBreak) return 'On Break - Enjoy your coffee! ☕';
+    if (canPunchOut) return 'Active - Currently working 💼';
+    if (canPunchIn) return 'Ready to start your day ⏰';
+    return 'Status unavailable';
   };
 
-  const handleClockOut = () => {
-    setIsClocking(true);
-    setTimeout(() => {
-      const now = new Date();
-      const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-      
-      const loginTime = currentAtt?.loginTime;
-      if (loginTime) {
-        const [loginHour, loginMinute] = loginTime.split(':').map(Number);
-        const loginDate = new Date();
-        loginDate.setHours(loginHour, loginMinute, 0);
-        
-        const diffMs = now.getTime() - loginDate.getTime();
-        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-        const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-        const totalHours = `${diffHours}h ${diffMinutes}m`;
-        
-        setAttendance((prev: any[]) => prev.map((a) => a.empId === employee.empId ? { 
-          ...a, 
-          logoutTime: time, 
-          hours: totalHours
-        } : a));
-      }
-      
-      setIsClocking(false);
-      showNotificationMessage('Successfully clocked out!', 'success');
-    }, 800);
-  };
-
-  const handleTakeBreak = () => {
-    setShowBreakModal(true);
-  };
-
-  const handleBreakSubmit = () => {
-    showNotificationMessage(`Break of ${breakDuration} minutes recorded`, 'info');
-    setBreakDuration(0);
-    setShowBreakModal(false);
-  };
-
-  const showNotificationMessage = (message: string, type: 'success' | 'error' | 'info') => {
-    setNotification({ message, type });
-    setShowNotification(true);
-    setTimeout(() => setShowNotification(false), 3000);
-  };
-
-  const downloadAttendance = () => {
-    showNotificationMessage('Downloading attendance report...', 'info');
-  };
+  // Get month name
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
 
   // Animation variants
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
+      transition: { staggerChildren: 0.1 }
     }
   };
 
   const itemVariants = {
     hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1
-    }
+    visible: { y: 0, opacity: 1 }
   };
 
   const pulseVariants = {
@@ -360,6 +571,13 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
       }
     }
   };
+
+  // Calculate total break time
+  const totalBreakTime = breaks
+    .filter(brk => brk.status === 'completed')
+    .reduce((sum, brk) => sum + (brk.duration || 0), 0);
+
+
 
   return (
     <motion.div 
@@ -402,6 +620,7 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
         <div>
           <h1 className="text-2xl font-bold text-gray-800">My Attendance</h1>
           <p className="text-gray-500">Track your daily attendance and view history</p>
+          <p className="text-sm text-gray-400">Employee ID: {employee.employeeId || employee.empId}</p>
         </div>
         <div className="flex items-center gap-2 text-gray-600 bg-gradient-to-r from-[#6B8DA2]/10 to-[#F5A42C]/10 px-4 py-2 rounded-xl border border-[#6B8DA2]/20">
           <Calendar className="w-5 h-5 text-[#6B8DA2]" />
@@ -411,150 +630,11 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
 
 
 
-      {/* Enhanced Clock Card */}
-      <motion.div 
-        variants={itemVariants}
-        className="bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] rounded-2xl p-6 text-white overflow-hidden relative shadow-xl"
-      >
-        {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full -translate-y-32 translate-x-32"></div>
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-white rounded-full translate-y-48 -translate-x-48"></div>
-        </div>
-
-        <div className="relative z-10">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
-            <div className="text-center lg:text-left">
-              <h3 className="text-2xl font-bold mb-2">Today's Attendance</h3>
-              <p className="text-white/90 text-lg">
-                {new Date().toLocaleDateString('en-US', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}
-              </p>
-              
-              <div className="flex items-center gap-6 mt-6">
-                <div className="text-center">
-                  <p className="text-sm text-white/80">Clock In</p>
-                  <p className="text-2xl font-bold mt-1">{currentAtt?.loginTime || '--:--'}</p>
-                </div>
-                <div className="h-10 w-px bg-white/30"></div>
-                <div className="text-center">
-                  <p className="text-sm text-white/80">Clock Out</p>
-                  <p className="text-2xl font-bold mt-1">{currentAtt?.logoutTime || '--:--'}</p>
-                </div>
-                <div className="h-10 w-px bg-white/30"></div>
-                <div className="text-center">
-                  <p className="text-sm text-white/80">Total Hours</p>
-                  <p className="text-2xl font-bold mt-1">{currentAtt?.hours || '--'}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex flex-col gap-4">
-              <div className="flex gap-4">
-                <motion.button
-                  variants={pulseVariants}
-                  animate={canPunchIn ? "pulse" : ""}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleClockIn}
-                  disabled={!canPunchIn || isClocking}
-                  className={`px-8 py-4 rounded-xl font-bold text-lg flex items-center gap-3 transition-all cursor-pointer ${
-                    canPunchIn 
-                      ? 'bg-white text-[#6B8DA2] hover:shadow-lg' 
-                      : 'bg-white/30 text-white/70 cursor-not-allowed'
-                  }`}
-                >
-                  {isClocking && canPunchIn ? (
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      className="w-6 h-6 border-2 border-[#6B8DA2] border-t-transparent rounded-full"
-                    />
-                  ) : (
-                    <LogIn className="w-6 h-6" />
-                  )}
-                  {canPunchIn ? (isClocking ? 'Punching In...' : 'Punch In') : 'Already Punched In'}
-                </motion.button>
-                
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleClockOut}
-                  disabled={!canPunchOut || isClocking}
-                  className={`px-8 py-4 rounded-xl font-bold text-lg flex items-center gap-3 transition-all cursor-pointer ${
-                    canPunchOut 
-                      ? 'bg-white text-[#F5A42C] hover:shadow-lg' 
-                      : 'bg-white/30 text-white/70 cursor-not-allowed'
-                  }`}
-                >
-                  {isClocking && canPunchOut ? (
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      className="w-6 h-6 border-2 border-[#F5A42C] border-t-transparent rounded-full"
-                    />
-                  ) : (
-                    <LogOut className="w-6 h-6" />
-                  )}
-                  {canPunchOut ? (isClocking ? 'Punching Out...' : 'Punch Out') : 'Punch Out'}
-                </motion.button>
-              </div>
-              
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleTakeBreak}
-                disabled={!canPunchOut}
-                className={`px-4 py-3 rounded-xl font-medium flex items-center justify-center gap-2 cursor-pointer ${
-                  canPunchOut 
-                    ? 'bg-white/20 text-white hover:bg-white/30' 
-                    : 'bg-white/10 text-white/50 cursor-not-allowed'
-                }`}
-              >
-                <Clock className="w-4 h-4" />
-                Take a Break
-              </motion.button>
-            </div>
-          </div>
-
-          {/* Status Indicator */}
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mt-6 flex items-center justify-center"
-          >
-            <div className="flex items-center gap-3 px-4 py-2 bg-white/10 rounded-full backdrop-blur-sm">
-              <motion.div
-                animate={workCompleted ? { scale: [1, 1.2, 1] } : canPunchOut ? { scale: [1, 1.1, 1] } : {}}
-                transition={{ repeat: workCompleted || canPunchOut ? Infinity : 0, duration: 2 }}
-                className={`w-3 h-3 rounded-full ${
-                  workCompleted ? 'bg-green-400 shadow-lg shadow-green-400/50' : 
-                  canPunchOut ? 'bg-yellow-400 shadow-lg shadow-yellow-400/50' : 
-                  'bg-gray-400'
-                }`}
-              />
-              <span className="text-sm font-medium">
-                {workCompleted 
-                  ? 'Work completed for today! 🎉' 
-                  : canPunchOut 
-                    ? 'Active - Currently working' 
-                    : 'Ready to start your day'}
-              </span>
-            </div>
-          </motion.div>
-        </div>
-      </motion.div>
-
       {/* Statistics Cards */}
       <motion.div 
         variants={itemVariants}
         className="grid grid-cols-1 md:grid-cols-4 gap-4"
       >
-        {/* Present Days Card */}
         <motion.div
           whileHover={{ y: -5 }}
           className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
@@ -565,26 +645,24 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
               <CheckCircle className="w-5 h-5 text-white" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-green-600">{totalPresent} day{totalPresent !== 1 ? 's' : ''}</p>
+          <p className="text-3xl font-bold text-green-600">{totalPresent}</p>
           <p className="text-sm text-gray-500 mt-2">{viewMode.charAt(0).toUpperCase() + viewMode.slice(1)} view</p>
         </motion.div>
 
-        {/* Absent Days Card */}
         <motion.div
           whileHover={{ y: -5 }}
           className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-800">Absent Days</h3>
-            <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-400 rounded-lg flex items-center justify-center">
-              <XCircle className="w-5 h-5 text-white" />
+            <h3 className="font-semibold text-gray-800">Late Days</h3>
+            <div className="w-10 h-10 bg-gradient-to-br from-yellow-500 to-yellow-400 rounded-lg flex items-center justify-center">
+              <Clock className="w-5 h-5 text-white" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-red-600">{totalAbsent} day{totalAbsent !== 1 ? 's' : ''}</p>
+          <p className="text-3xl font-bold text-yellow-600">{totalLate}</p>
           <p className="text-sm text-gray-500 mt-2">{viewMode.charAt(0).toUpperCase() + viewMode.slice(1)} view</p>
         </motion.div>
 
-        {/* Average Hours Card */}
         <motion.div
           whileHover={{ y: -5 }}
           className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
@@ -599,7 +677,6 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
           <p className="text-sm text-gray-500 mt-2">Daily average</p>
         </motion.div>
 
-        {/* Total Hours Card */}
         <motion.div
           whileHover={{ y: -5 }}
           className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
@@ -661,7 +738,7 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
         </div>
       </motion.div>
 
-            {/* Date Navigation based on View Mode */}
+      {/* Date Navigation based on View Mode */}
       <motion.div 
         variants={itemVariants}
         className="bg-white rounded-xl p-4 shadow-sm border border-gray-100"
@@ -797,41 +874,7 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
         </div>
       </motion.div>
 
-      {/* View Mode Specific Display */}
-      {viewMode === 'weekly' && (
-        <motion.div 
-          variants={itemVariants}
-          className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
-        >
-          <h3 className="font-semibold text-gray-800 text-lg mb-4">Weekly Breakdown</h3>
-          <div className="grid grid-cols-7 gap-2">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => {
-              const dayData = filteredAttendance.find(a => a.dayOfWeek === day);
-              return (
-                <motion.div
-                  key={day}
-                  whileHover={{ y: -5 }}
-                  className="text-center p-3 rounded-lg border border-gray-100"
-                >
-                  <div className="text-sm text-gray-500 mb-2">{day}</div>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-2 ${
-                    dayData?.status === 'present' 
-                      ? 'bg-green-100 text-green-600' 
-                      : 'bg-red-100 text-red-600'
-                  }`}>
-                    {dayData ? (dayData.status === 'present' ? '✓' : '✗') : '-'}
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    {dayData ? dayData.totalHours : 'N/A'}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        </motion.div>
-      )}
-
-      {/* Attendance History */}
+      {/* Attendance History Table */}
       <motion.div 
         variants={itemVariants}
         className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
@@ -858,12 +901,20 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
                 <th className="text-left px-6 py-4 text-gray-600 font-medium text-sm">Total Hours</th>
                 <th className="text-left px-6 py-4 text-gray-600 font-medium text-sm">Breaks</th>
                 <th className="text-left px-6 py-4 text-gray-600 font-medium text-sm">Status</th>
-                <th className="text-left px-6 py-4 text-gray-600 font-medium text-sm">Actions</th>
               </tr>
             </thead>
             <tbody>
               <AnimatePresence>
-                {filteredAttendance.length > 0 ? (
+                {isLoadingHistory ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#6B8DA2]"></div>
+                        <span>Loading attendance data...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredAttendance.length > 0 ? (
                   filteredAttendance.map((record, index) => (
                     <motion.tr 
                       key={record.id}
@@ -875,85 +926,55 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
                     >
                       <td className="px-6 py-4">
                         <div className="font-medium text-gray-800">
-                          {new Date(record.date).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric'
-                          })}
+                          {formatDateForDisplay(record.date)}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-gray-600">
-                        {record.dayOfWeek}
+                        {record.day}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-gray-400" />
-                          <span className="font-medium">{record.loginTime || '--:--'}</span>
+                          <span className="font-medium">{record.checkIn ? formatTimeForDisplay(record.checkIn) : '--:--'}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-gray-400" />
-                          <span className="font-medium">{record.logoutTime || '--:--'}</span>
+                          <span className="font-medium">{record.checkOut ? formatTimeForDisplay(record.checkOut) : '--:--'}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="font-semibold text-gray-800">{record.totalHours}</span>
+                        <span className="font-semibold text-gray-800">{formatHoursForDisplay(record.totalHours)}</span>
                       </td>
                       <td className="px-6 py-4">
                         <span className="px-3 py-1 bg-gradient-to-r from-[#6B8DA2]/10 to-[#F5A42C]/10 text-[#6B8DA2] rounded-full text-xs font-medium border border-[#6B8DA2]/20">
-                          {record.breaks}m
+                          {record.breaks || 0}m
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <motion.span 
                           whileHover={{ scale: 1.05 }}
-                          className={`px-3 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1 ${
-                            record.status === 'present' 
-                              ? 'bg-green-100 text-green-700' 
-                              : 'bg-red-100 text-red-700'
-                          }`}
+                          className={`px-3 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1 ${getStatusBadgeColor(record.status)}`}
                         >
-                          {record.status === 'present' ? (
-                            <>
-                              <CheckCircle className="w-3 h-3" />
-                              Present
-                            </>
-                          ) : (
-                            <>
-                              <XCircle className="w-3 h-3" />
-                              Absent
-                            </>
-                          )}
+                          {record.status === 'present' && <CheckCircle className="w-3 h-3" />}
+                          {record.status === 'late' && <Clock className="w-3 h-3" />}
+                          {record.status === 'absent' && <XCircle className="w-3 h-3" />}
+                          {record.status.charAt(0).toUpperCase() + record.status.slice(1).replace('_', ' ')}
                         </motion.span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            className="p-2 text-[#6B8DA2] hover:bg-[#6B8DA2]/10 rounded-lg transition cursor-pointer"
-                            title="View Details"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </motion.button>
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            className="p-2 text-[#F5A42C] hover:bg-[#F5A42C]/10 rounded-lg transition cursor-pointer"
-                            title="Download"
-                            onClick={downloadAttendance}
-                          >
-                            <Download className="w-4 h-4" />
-                          </motion.button>
-                        </div>
                       </td>
                     </motion.tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                       No attendance records found for the selected {viewMode} view.
+                      <button
+                        onClick={fetchAttendanceHistory}
+                        className="mt-2 block mx-auto px-4 py-2 bg-[#6B8DA2] text-white rounded-lg hover:bg-[#5A7A8F] transition"
+                      >
+                        Refresh Data
+                      </button>
                     </td>
                   </tr>
                 )}
@@ -963,178 +984,7 @@ const MyAttendancePage = ({ employee, attendance, setAttendance }: MyAttendanceP
         </div>
       </motion.div>
 
-      {/* Weekly Overview & Summary */}
-      <motion.div 
-        variants={itemVariants}
-        className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-      >
-        {/* Weekly Overview */}
-        <motion.div
-          whileHover={{ y: -5 }}
-          className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-[#6B8DA2]" />
-              {viewMode.charAt(0).toUpperCase() + viewMode.slice(1)} Overview
-            </h3>
-          </div>
-          <div className="space-y-4">
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => {
-              const dayData = attendanceHistory
-                .filter(a => a.dayOfWeek === day && a.status === 'present')
-                .slice(0, 4);
-              
-              const avgHours = dayData.length > 0 
-                ? dayData.reduce((acc, curr) => {
-                    const hoursMatch = curr.totalHours.match(/(\d+)h\s*(\d*)m?/);
-                    if (hoursMatch) {
-                      const hours = parseInt(hoursMatch[1]);
-                      const minutes = hoursMatch[2] ? parseInt(hoursMatch[2]) / 60 : 0;
-                      return acc + hours + minutes;
-                    }
-                    return acc;
-                  }, 0) / dayData.length
-                : 0;
-              
-              return (
-                <div key={day} className="flex items-center gap-4">
-                  <div className="w-16 text-gray-500 text-sm">{day}</div>
-                  <div className="flex-1 bg-gray-200 rounded-full h-3 overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${Math.min(avgHours / 10 * 100, 100)}%` }}
-                      transition={{ duration: 1, delay: i * 0.1 }}
-                      className={`h-full rounded-full ${
-                        i < 5 
-                          ? 'bg-gradient-to-r from-[#6B8DA2] to-[#7A9DB2]' 
-                          : 'bg-gradient-to-r from-[#F5A42C] to-[#F5B53C]'
-                      }`}
-                    />
-                  </div>
-                  <div className="w-16 text-right text-sm font-medium text-gray-700">
-                    {avgHours > 0 ? `${avgHours.toFixed(1)}h` : '-'}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </motion.div>
-
-        {/* Attendance Summary */}
-        <motion.div
-          whileHover={{ y: -5 }}
-          className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-              <PieChart className="w-5 h-5 text-[#F5A42C]" />
-              {viewMode.charAt(0).toUpperCase() + viewMode.slice(1)} Summary
-            </h3>
-          </div>
-          <div className="flex items-center justify-center h-64">
-            <div className="relative w-48 h-48">
-              {/* Pie chart visualization */}
-              <div className="absolute inset-0 rounded-full border-8 border-green-500"></div>
-              <div className="absolute inset-0 rounded-full border-8 border-red-500" 
-                style={{ 
-                  clipPath: `inset(0 ${100 - (totalAbsent / Math.max(totalPresent + totalAbsent, 1) * 100)}% 0 0)`,
-                  transform: 'rotate(-90deg)'
-                }}
-              ></div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-800">
-                    {Math.round((totalPresent / Math.max(totalPresent + totalAbsent, 1)) * 100)}%
-                  </div>
-                  <div className="text-gray-500 text-sm">Attendance Rate</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-center gap-6 mt-4">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span className="text-sm">Present ({totalPresent})</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-              <span className="text-sm">Absent ({totalAbsent})</span>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-
-      {/* Break Modal */}
-      <AnimatePresence>
-        {showBreakModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-md"
-            >
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Take a Break</h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-gray-700 mb-2">Break Duration (minutes)</label>
-                  <div className="flex items-center gap-4">
-                    {[15, 30, 45, 60].map((duration) => (
-                      <motion.button
-                        key={duration}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setBreakDuration(duration)}
-                        className={`px-4 py-2 rounded-lg border-2 cursor-pointer ${
-                          breakDuration === duration 
-                            ? 'border-[#6B8DA2] bg-gradient-to-r from-[#6B8DA2]/10 to-[#F5A42C]/10 text-[#6B8DA2]' 
-                            : 'border-gray-200 text-gray-600'
-                        }`}
-                      >
-                        {duration}m
-                      </motion.button>
-                    ))}
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-gray-700 mb-2">Custom Duration</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="120"
-                    value={breakDuration}
-                    onChange={(e) => setBreakDuration(parseInt(e.target.value) || 0)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#6B8DA2]"
-                    placeholder="Enter minutes"
-                  />
-                </div>
-              </div>
-              
-              <div className="flex gap-3 mt-6">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleBreakSubmit}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-lg font-semibold hover:shadow-lg transition cursor-pointer"
-                >
-                  Start Break
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowBreakModal(false)}
-                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition cursor-pointer"
-                >
-                  Cancel
-                </motion.button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      
     </motion.div>
   );
 };

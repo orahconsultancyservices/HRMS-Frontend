@@ -1,18 +1,18 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Check, X, Clock, Calendar, Download, Filter, 
-  Search, User, Mail, Phone, MapPin, Briefcase,
-  ChevronDown, ChevronUp, FileText, Eye, 
-  BarChart3, PieChart, TrendingUp, TrendingDown,
-  DownloadCloud, Clock as ClockIcon, CalendarDays,
-  Users, Target, Award, Coffee, Grid, List,
+  Check, X, Clock, Calendar,  Filter, 
+  Search, Mail, Phone, MapPin, Briefcase,
+  FileText, 
+  BarChart3, PieChart, 
+  DownloadCloud, CalendarDays,
+  Users, Target,
   ChevronLeft,
   ChevronRight,
-  Trash2,
+
   Users as UsersIcon
 } from 'lucide-react';
-import DatePicker from 'react-datepicker';
+// import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import StatCard from '../common/StatCard';
 
@@ -40,6 +40,7 @@ interface AttendanceRecord {
   hours: string;
   status: 'present' | 'absent' | 'late' | 'half-day' | 'on-leave';
   breaks?: number;
+  department?:any;
   overtime?: string;
   productivity?: number;
   location?: string;
@@ -57,7 +58,7 @@ const AttendancePage = ({
   attendance = [], 
   employees = []
 }: AttendancePageProps) => {
-  const [dateRange, setDateRange] = useState<DateRange>([null, null]);
+  const [dateRange, _setDateRange] = useState<DateRange>([null, null]);
   const [startDate, endDate] = dateRange;
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeDetail | null>(null);
@@ -178,13 +179,13 @@ const AttendancePage = ({
     ? ((presentCount / totalRecords) * 100).toFixed(1)
     : '0.0';
   
-  const avgHours = totalRecords > 0
-    ? filteredAttendance.reduce((acc, curr) => {
-        const hourMatch = curr.hours?.match(/(\d+(\.\d+)?)h/);
-        const hourValue = hourMatch ? parseFloat(hourMatch[1]) : 0;
-        return acc + hourValue;
-      }, 0) / totalRecords
-    : 0;
+  // const avgHours = totalRecords > 0
+  //   ? filteredAttendance.reduce((acc, curr) => {
+  //       const hourMatch = curr.hours?.match(/(\d+(\.\d+)?)h/);
+  //       const hourValue = hourMatch ? parseFloat(hourMatch[1]) : 0;
+  //       return acc + hourValue;
+  //     }, 0) / totalRecords
+  //   : 0;
 
   // Calendar view specific functions
   const getDaysInMonth = (year: number, month: number) => {

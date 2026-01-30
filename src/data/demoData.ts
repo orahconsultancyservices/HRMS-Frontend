@@ -62,9 +62,9 @@ export const demoEmployees = [
 ];
 
 export const demoLeaveRequests = [
-  { id: 1, empId: 1, empName: 'Rahul Sharma', type: 'Casual', from: '2025-11-25', to: '2025-11-26', days: 2, reason: 'Family function', status: 'pending' },
-  { id: 2, empId: 2, empName: 'Priya Patel', type: 'Sick', from: '2025-11-20', to: '2025-11-20', days: 1, reason: 'Not feeling well', status: 'approved' },
-  { id: 3, empId: 3, empName: 'Amit Kumar', type: 'Earned', from: '2025-12-01', to: '2025-12-05', days: 5, reason: 'Vacation', status: 'pending' },
+  { id: 1, empId: 1, empName: 'Rahul Sharma', type: 'Casual', from: '2025-11-25', to: '2025-11-26', days: 2, reason: 'Family function', status: 'pending', appliedDate: '2025-11-20' },
+  { id: 2, empId: 2, empName: 'Priya Patel', type: 'Sick', from: '2025-11-20', to: '2025-11-20', days: 1, reason: 'Not feeling well', status: 'approved', appliedDate: '2025-11-19' },
+  { id: 3, empId: 3, empName: 'Amit Kumar', type: 'Earned', from: '2025-12-01', to: '2025-12-05', days: 5, reason: 'Vacation', status: 'pending', appliedDate: '2025-11-22' },
 ];
 
 // In demoData.ts, replace the demoAttendance with this expanded version:

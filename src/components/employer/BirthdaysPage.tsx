@@ -1,63 +1,88 @@
 import { motion } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import UpcomingBirthdays from '../common/UpcomingBirthdays';
-import { Calendar, Gift } from 'lucide-react';
+import { Calendar, Gift, RefreshCw, AlertCircle } from 'lucide-react';
+import { useBirthdays } from '../../hooks/useBirthdaysQuery';
 
-interface Employee {
-  id: string;
-  name: string;
-  avatar: string;
-  department: string;
-  position: string;
-  birthday: string;
-  email: string;
-  phone: string;
-  joinDate: string;
-  leaveBalance: {
-    casual: number;
-    sick: number;
-    earned: number;
-  };
-}
-
-interface BirthdaysPageProps {
-  employees: Employee[];
-}
-
-const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
-  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const BirthdaysPage = () => {
+  const { data: employees, isLoading, isError, error, refetch } = useBirthdays();
   
-  // Fix date parsing issue
-  const grouped = employees.reduce((acc: Record<number, Employee[]>, emp) => {
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4A6A82]"></div>
+        <p className="text-gray-600">Loading birthdays...</p>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <AlertCircle className="w-12 h-12 text-red-500" />
+        <div className="text-center">
+          <p className="text-red-600 font-semibold mb-2">Error loading birthdays</p>
+          <p className="text-gray-600 text-sm mb-4">
+            {error instanceof Error ? error.message : 'Failed to fetch birthdays'}
+          </p>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => refetch()}
+            className="px-4 py-2 bg-[#4A6A82] text-white rounded-lg hover:bg-[#3A5A72] transition-colors flex items-center gap-2 mx-auto"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Retry
+          </motion.button>
+        </div>
+      </div>
+    );
+  }
+
+  // Group birthdays by month
+  const grouped = (employees || []).reduce((acc: Record<number, typeof employees>, emp) => {
     const dateStr = emp.birthday;
-    
-    // Handle different date formats safely
+    if (!dateStr) return acc;
+
     let month: number;
     try {
-      // Try parsing as ISO string first
-      const date = new Date(dateStr);
-      if (!isNaN(date.getTime())) {
+      if (dateStr.includes('T')) {
+        const date = new Date(dateStr);
         month = date.getMonth();
+      } else if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        if (parts.length >= 2) {
+          month = parseInt(parts[1], 10) - 1;
+        } else {
+          return acc;
+        }
       } else {
-        // Fallback to manual parsing for "2026-12-02" format
-        const [year, m, day] = dateStr.split('-').map(Number);
-        month = m - 1; // Convert to 0-indexed
+        const date = new Date(dateStr);
+        month = date.getMonth();
       }
+
+      if (isNaN(month) || month < 0 || month > 11) {
+        console.warn('Invalid month for employee:', emp.name, 'date:', dateStr);
+        return acc;
+      }
+
+      if (!acc[month]) acc[month] = [];
+      acc[month].push(emp);
     } catch (error) {
-      console.error('Error parsing date:', dateStr, error);
-      month = 0; // Default to January if parsing fails
+      console.error('Error parsing date for employee:', emp.name, error);
     }
-    
-    if (!acc[month]) acc[month] = [];
-    acc[month].push(emp);
+
     return acc;
   }, {});
 
-  // Sort months in order
   const sortedMonths = Object.keys(grouped)
     .map(Number)
     .sort((a, b) => a - b);
 
-  // Helper function to get department gradient
   const getDepartmentGradient = (department: string) => {
     const gradients = {
       'Engineering': 'from-[#6B8DA2] to-[#7A9DB2]',
@@ -72,23 +97,36 @@ const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
     return gradients[department as keyof typeof gradients] || gradients.default;
   };
 
-  // Helper function to format date correctly
   const formatBirthdayDate = (birthdayStr: string) => {
+    if (!birthdayStr) return 'Date not set';
+
     try {
-      // Always use manual parsing to avoid timezone issues
-      const [year, month, day] = birthdayStr.split('-').map(Number);
-      const date = new Date(year, month - 1, day);
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric' 
+      let date: Date;
+
+      if (birthdayStr.includes('T')) {
+        date = new Date(birthdayStr);
+      } else if (birthdayStr.includes('-')) {
+        const [year, month, day] = birthdayStr.split('-').map(Number);
+        date = new Date(year, month - 1, day);
+      } else {
+        date = new Date(birthdayStr);
+      }
+
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric'
       });
     } catch (error) {
+      console.error('Error formatting date:', birthdayStr, error);
       return 'Invalid Date';
     }
   };
 
-  // Animation variants
-  const containerVariants = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
@@ -98,7 +136,7 @@ const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
     }
   };
 
-  const itemVariants = {
+  const itemVariants: Variants = {
     hidden: { y: 20, opacity: 0 },
     visible: {
       y: 0,
@@ -106,14 +144,14 @@ const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
     }
   };
 
-  const monthCardVariants = {
+  const monthCardVariants: Variants = {
     hidden: { scale: 0.9, opacity: 0 },
     visible: { scale: 1, opacity: 1 },
     hover: { scale: 1.02, transition: { type: 'spring', stiffness: 300 } }
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial="hidden"
       animate="visible"
       variants={containerVariants}
@@ -125,19 +163,30 @@ const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
           <h1 className="text-2xl font-bold text-gray-800">Birthday Calendar</h1>
           <p className="text-gray-500">Celebrate birthdays with your colleagues</p>
         </div>
-        <div className="flex items-center gap-2 text-gray-600 bg-gradient-to-r from-[#6B8DA2]/10 to-[#F5A42C]/10 px-4 py-2 rounded-xl border border-[#6B8DA2]/20">
-          <Calendar className="w-5 h-5 text-[#6B8DA2]" />
-          <span className="font-medium">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 text-gray-600 bg-gradient-to-r from-[#6B8DA2]/10 to-[#F5A42C]/10 px-4 py-2 rounded-xl border border-[#6B8DA2]/20">
+            <Calendar className="w-5 h-5 text-[#6B8DA2]" />
+            <span className="font-medium">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+          </div>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => refetch()}
+            className="p-2 bg-white rounded-lg border border-gray-200 hover:border-[#4A6A82] transition-colors"
+            title="Refresh birthdays"
+          >
+            <RefreshCw className="w-5 h-5 text-[#4A6A82]" />
+          </motion.button>
         </div>
       </motion.div>
 
       {/* Upcoming Birthdays Component */}
       <motion.div variants={itemVariants}>
-        <UpcomingBirthdays employees={employees} />
+        <UpcomingBirthdays />
       </motion.div>
 
       {/* All Birthdays by Month */}
-      <motion.div 
+      <motion.div
         variants={itemVariants}
         className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
       >
@@ -152,10 +201,10 @@ const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
             </div>
           </div>
           <div className="text-sm text-gray-500">
-            Total: {employees.length} employees
+            Total: {employees?.length || 0} employees
           </div>
         </div>
-        
+
         {sortedMonths.length === 0 ? (
           <div className="text-center py-8">
             <Gift className="w-12 h-12 text-gray-300 mx-auto mb-3" />
@@ -167,38 +216,33 @@ const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
               const monthEmployees = grouped[month];
               const currentMonth = new Date().getMonth();
               const isCurrentMonth = month === currentMonth;
-              
+
               return (
                 <motion.div
                   key={month}
                   variants={monthCardVariants}
                   whileHover="hover"
-                  className={`p-4 rounded-xl border transition-all ${
-                    isCurrentMonth 
-                      ? 'bg-gradient-to-r from-[#6B8DA2]/5 to-[#F5A42C]/5 border-[#6B8DA2]/20 shadow-sm' 
+                  className={`p-4 rounded-xl border transition-all ${isCurrentMonth
+                      ? 'bg-gradient-to-r from-[#6B8DA2]/5 to-[#F5A42C]/5 border-[#6B8DA2]/20 shadow-sm'
                       : 'bg-gray-50/50 border-gray-200 hover:shadow-sm'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h4 className={`font-semibold ${
-                      isCurrentMonth ? 'text-[#6B8DA2]' : 'text-gray-700'
-                    }`}>
+                    <h4 className={`font-semibold ${isCurrentMonth ? 'text-[#6B8DA2]' : 'text-gray-700'}`}>
                       {months[month]}
                       {isCurrentMonth && ' (Current)'}
                     </h4>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      isCurrentMonth 
-                        ? 'bg-[#4A6A82] text-white' 
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${isCurrentMonth
+                        ? 'bg-[#4A6A82] text-white'
                         : 'bg-gray-200 text-gray-600'
-                    }`}>
+                      }`}>
                       {monthEmployees.length} {monthEmployees.length === 1 ? 'birthday' : 'birthdays'}
                     </span>
                   </div>
-                  
+
                   <div className="space-y-2">
                     {monthEmployees
                       .sort((a, b) => {
-                        // Sort by day of month
                         const dateA = new Date(a.birthday);
                         const dateB = new Date(b.birthday);
                         return dateA.getDate() - dateB.getDate();
@@ -206,18 +250,17 @@ const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
                       .map((emp) => {
                         const today = new Date();
                         const birthday = new Date(emp.birthday);
-                        const isToday = birthday.getDate() === today.getDate() && 
-                                       birthday.getMonth() === today.getMonth();
-                        
+                        const isToday = birthday.getDate() === today.getDate() &&
+                          birthday.getMonth() === today.getMonth();
+
                         return (
                           <motion.div
                             key={emp.id}
                             whileHover={{ x: 5 }}
-                            className={`flex items-center gap-3 p-2 rounded-lg ${
-                              isToday 
-                                ? 'bg-gradient-to-r from-[#F5A42C]/10 to-[#F5A42C]/5 border border-[#F5A42C]/20' 
+                            className={`flex items-center gap-3 p-2 rounded-lg ${isToday
+                                ? 'bg-gradient-to-r from-[#F5A42C]/10 to-[#F5A42C]/5 border border-[#F5A42C]/20'
                                 : 'hover:bg-white'
-                            }`}
+                              }`}
                           >
                             <div className="relative">
                               <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-r ${getDepartmentGradient(emp.department)}`}>
@@ -233,12 +276,10 @@ const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
                                 </motion.div>
                               )}
                             </div>
-                            
+
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <p className={`font-medium truncate ${
-                                  isToday ? 'text-[#F5A42C]' : 'text-gray-800'
-                                }`}>
+                                <p className={`font-medium truncate ${isToday ? 'text-[#F5A42C]' : 'text-gray-800'}`}>
                                   {emp.name}
                                 </p>
                                 {isToday && (
@@ -249,10 +290,7 @@ const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
                               </div>
                               <div className="flex items-center justify-between">
                                 <p className="text-gray-500 text-xs">{emp.department}</p>
-                                <p className={`text-sm font-medium ${
-                                  isToday ? 'text-[#F5A42C]' : 'text-gray-600'
-                                }`}>
-                                  {/* Use the corrected format function */}
+                                <p className={`text-sm font-medium ${isToday ? 'text-[#F5A42C]' : 'text-gray-600'}`}>
                                   {formatBirthdayDate(emp.birthday)}
                                 </p>
                               </div>
@@ -269,7 +307,7 @@ const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
       </motion.div>
 
       {/* Stats Footer */}
-      <motion.div 
+      <motion.div
         variants={itemVariants}
         className="grid grid-cols-1 md:grid-cols-4 gap-4"
       >
@@ -279,20 +317,20 @@ const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
           </div>
           <div className="text-sm text-gray-500">Total Birthdays</div>
         </div>
-        
+
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
           <div className="text-2xl font-bold text-[#F5A42C]">
-            {employees.filter(emp => {
+            {(employees || []).filter(emp => {
               const birthday = new Date(emp.birthday);
               return birthday.getMonth() === new Date().getMonth();
             }).length}
           </div>
           <div className="text-sm text-gray-500">This Month</div>
         </div>
-        
+
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
           <div className="text-2xl font-bold text-[#5A7A8F]">
-            {employees.filter(emp => {
+            {(employees || []).filter(emp => {
               const birthday = new Date(emp.birthday);
               const nextMonth = new Date().getMonth() + 1;
               return birthday.getMonth() === (nextMonth > 11 ? 0 : nextMonth);
@@ -300,10 +338,10 @@ const BirthdaysPage = ({ employees }: BirthdaysPageProps) => {
           </div>
           <div className="text-sm text-gray-500">Next Month</div>
         </div>
-        
+
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
           <div className="text-2xl font-bold text-green-600">
-            {new Set(employees.map(emp => emp.department)).size}
+            {new Set((employees || []).map(emp => emp.department)).size}
           </div>
           <div className="text-sm text-gray-500">Departments</div>
         </div>

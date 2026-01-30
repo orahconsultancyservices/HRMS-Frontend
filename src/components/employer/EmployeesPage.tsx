@@ -1,34 +1,57 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import {
   Users, UserPlus, Search, Filter, Mail, Phone, MapPin,
   Briefcase, Calendar, Eye, Edit, Trash2,
-  ChevronDown, ChevronUp, FileText,
-  CheckCircle, XCircle, Clock,
-  DownloadCloud, X, Building, UserCheck,
+  ChevronDown, ChevronUp,
+  CheckCircle, Clock,
+  DownloadCloud, X, Building,
   PhoneCall, PhoneMissed,
-  PhoneCallIcon,
-  User, Lock, ChevronLeft, ChevronRight
+  User, Lock, ChevronLeft, ChevronRight,
+  Cake
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import {
+  useEmployees,
+  useCreateEmployee,
+  useUpdateEmployee,
+  useDeleteEmployee,
+  useDepartments,
+  usePositions,
+  useLeaveBalance,
+  useUpdateLeaveBalance
+} from '../../hooks/useEmployees';
+import { useLeaves } from '../../hooks/useLeaves';
 
 // Define types
 interface Employee {
   id: number;
-  name: string;
+  firstName: string;
+  lastName: string;
+  employeeId: string; // This comes from API
   email: string;
-  orgEmail: string; // Added organization email
-  orgPassword: string; // Added organization password
+  orgEmail: string;
+  orgPassword: string; // Actual password from API
   phone: string;
   department: string;
   position: string;
   joinDate: string;
+  leaveDate?: string;
+  birthday?: string; // This is in the API response
   avatar?: string;
   location?: string;
   emergencyContact?: string;
-  skills?: string[];
+  isActive?: boolean;
+  // Add fields that might be missing but useful
+  name?: string; // Not in API, but we can compute it
+  empId?: string; // Alternative ID field
+
+  // Add leave balance from API
   leaveBalance?: {
+    id: number;
+    employeeId: number;
     casual: number;
     sick: number;
     earned: number;
@@ -37,7 +60,6 @@ interface Employee {
     bereavement?: number;
   };
 }
-
 interface LeaveRequest {
   id: number;
   empId: number;
@@ -56,24 +78,20 @@ interface LeaveRequest {
 }
 
 interface NewEmployeeForm {
-  name: string;
+  firstName: string;
+  lastName: string;
+  employeeId: string;
   email: string;
-  orgEmail: string; // Added organization email
-  orgPassword: string; // Added organization password
+  orgEmail: string;
+  orgPassword: string;
   phone: string;
   department: string;
+  birthday: Date | null;
   position: string;
   joinDate: Date | null;
+  leaveDate: Date | null;
   location: string;
   emergencyContact: string;
-}
-
-interface EmployeesPageProps {
-  employees: Employee[];
-  setEmployees: React.Dispatch<React.SetStateAction<Employee[]>>;
-  departments?: string[];
-  positions?: string[];
-  leaveRequests?: LeaveRequest[];
 }
 
 type DateRange = [Date | null, Date | null];
@@ -112,24 +130,49 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
   setCustomPosition,
   handleAddCustomDepartment,
   handleAddCustomPosition,
-  isEditing
 }) => {
   const [showOrgPassword, setShowOrgPassword] = useState(false);
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* First Name */}
         <div>
-          <label className="block text-gray-700 font-medium mb-2">Full Name *</label>
+          <label className="block text-gray-700 font-medium mb-2">First Name *</label>
           <input
             type="text"
-            value={newEmployee.name}
-            onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
+            value={newEmployee.firstName}
+            onChange={(e) => setNewEmployee({ ...newEmployee, firstName: e.target.value })}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
-            placeholder="Enter full name"
+            placeholder="Enter First Name"
           />
         </div>
 
+        {/* Last Name */}
+        <div>
+          <label className="block text-gray-700 font-medium mb-2">Last Name *</label>
+          <input
+            type="text"
+            value={newEmployee.lastName}
+            onChange={(e) => setNewEmployee({ ...newEmployee, lastName: e.target.value })}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+            placeholder="Enter Last Name"
+          />
+        </div>
+
+        {/* Employee ID */}
+        <div>
+          <label className="block text-gray-700 font-medium mb-2">Employee ID *</label>
+          <input
+            type="text"
+            value={newEmployee.employeeId}
+            onChange={(e) => setNewEmployee({ ...newEmployee, employeeId: e.target.value })}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+            placeholder="Enter Employee ID, e.g., O-001"
+          />
+        </div>
+
+        {/* Personal Email */}
         <div>
           <label className="block text-gray-700 font-medium mb-2">Personal Email *</label>
           <input
@@ -141,6 +184,7 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
           />
         </div>
 
+        {/* Organization Email */}
         <div>
           <label className="block text-gray-700 font-medium mb-2">Organization Email *</label>
           <input
@@ -152,6 +196,7 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
           />
         </div>
 
+        {/* Organization Password */}
         <div>
           <label className="block text-gray-700 font-medium mb-2">Organization Password *</label>
           <div className="relative">
@@ -166,23 +211,13 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
               type="button"
               onClick={() => setShowOrgPassword(!showOrgPassword)}
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition cursor-pointer"
-              aria-label={showOrgPassword ? "Hide password" : "Show password"}
             >
-              {showOrgPassword ? (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                  <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
-                  <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
-                </svg>
-              )}
+              {showOrgPassword ? 'Hide' : 'Show'}
             </button>
           </div>
         </div>
 
+        {/* Personal Phone Number */}
         <div>
           <label className="block text-gray-700 font-medium mb-2">Personal Phone Number</label>
           <input
@@ -190,11 +225,11 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
             value={newEmployee.phone}
             onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
-            placeholder="Enter Personal phone number"
+            placeholder="Enter personal phone number"
           />
         </div>
 
-        {/* Department Field with Create Option */}
+        {/* Department Field */}
         <div>
           <label className="block text-gray-700 font-medium mb-2">Department *</label>
           {!showCustomDepartment ? (
@@ -210,13 +245,13 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
                       setNewEmployee({ ...newEmployee, department: e.target.value });
                     }
                   }}
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white"
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer"
                 >
                   <option value="">Select Department</option>
                   {departments.map(dept => (
                     <option key={dept} value={dept}>{dept}</option>
                   ))}
-                  <option value="custom">+ Create New Department</option>
+                  <option value="custom" className="text-purple-600 font-medium">+ Create New Department</option>
                 </select>
               </div>
             </div>
@@ -229,6 +264,7 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
                   onChange={(e) => setCustomDepartment(e.target.value)}
                   className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
                   placeholder="Enter new department name"
+                  autoFocus
                 />
                 <button
                   onClick={handleAddCustomDepartment}
@@ -237,6 +273,7 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
                     ? 'bg-purple-600 text-white hover:bg-purple-700'
                     : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                     }`}
+                  title="Add Department"
                 >
                   ✓
                 </button>
@@ -247,17 +284,19 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
                     setNewEmployee({ ...newEmployee, department: '' });
                   }}
                   className="px-4 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition cursor-pointer"
+                  title="Cancel"
                 >
                   ✕
                 </button>
               </div>
+              <p className="text-sm text-gray-500 ml-1">Enter a new department name and click the checkmark to add it</p>
             </div>
           )}
         </div>
 
-        {/* Position Field with Create Option */}
+        {/* Designation Field */}
         <div>
-          <label className="block text-gray-700 font-medium mb-2">Position *</label>
+          <label className="block text-gray-700 font-medium mb-2">Designation *</label>
           {!showCustomPosition ? (
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -271,13 +310,13 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
                       setNewEmployee({ ...newEmployee, position: e.target.value });
                     }
                   }}
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white"
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer"
                 >
-                  <option value="">Select Position</option>
+                  <option value="">Select Designation</option>
                   {positions.map(pos => (
                     <option key={pos} value={pos}>{pos}</option>
                   ))}
-                  <option value="custom">+ Create New Position</option>
+                  <option value="custom" className="text-purple-600 font-medium">+ Create New Designation</option>
                 </select>
               </div>
             </div>
@@ -289,7 +328,8 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
                   value={customPosition}
                   onChange={(e) => setCustomPosition(e.target.value)}
                   className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
-                  placeholder="Enter new position name"
+                  placeholder="Enter new designation name"
+                  autoFocus
                 />
                 <button
                   onClick={handleAddCustomPosition}
@@ -298,6 +338,7 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
                     ? 'bg-purple-600 text-white hover:bg-purple-700'
                     : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                     }`}
+                  title="Add Designation"
                 >
                   ✓
                 </button>
@@ -308,14 +349,38 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
                     setNewEmployee({ ...newEmployee, position: '' });
                   }}
                   className="px-4 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition cursor-pointer"
+                  title="Cancel"
                 >
                   ✕
                 </button>
               </div>
+              <p className="text-sm text-gray-500 ml-1">Enter a new designation name and click the checkmark to add it</p>
             </div>
           )}
         </div>
 
+        {/* Birthday - NEW FIELD */}
+        <div>
+          <label className="block text-gray-700 font-medium mb-2 flex items-center gap-2">
+            <Cake className="w-4 h-4 text-purple-600" />
+            Date of Birth
+          </label>
+          <DatePicker
+            selected={newEmployee.birthday}
+            onChange={(date: Date | null) => setNewEmployee({ ...newEmployee, birthday: date })}
+            dateFormat="MMMM d, yyyy"
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer"
+            placeholderText="Select date of birth"
+            showYearDropdown
+            scrollableYearDropdown
+            yearDropdownItemNumber={100}
+            maxDate={new Date()}
+            isClearable
+          />
+          <p className="text-sm text-gray-500 mt-1">This will be used for birthday reminders</p>
+        </div>
+
+        {/* Join Date and Leave Date */}
         <div>
           <label className="block text-gray-700 font-medium mb-2">Join Date</label>
           <DatePicker
@@ -326,7 +391,19 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
             placeholderText="Select join date"
           />
         </div>
+        <div>
+          <label className="block text-gray-700 font-medium mb-2">Leave Date</label>
+          <DatePicker
+            selected={newEmployee.leaveDate}
+            onChange={(date: Date | null) => setNewEmployee({ ...newEmployee, leaveDate: date })}
+            dateFormat="MMMM d, yyyy"
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer"
+            placeholderText="Select leave date (optional)"
+            isClearable
+          />
+        </div>
 
+        {/* Location */}
         <div>
           <label className="block text-gray-700 font-medium mb-2">Location</label>
           <input
@@ -338,7 +415,8 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
           />
         </div>
 
-        <div className="md:col-span-2">
+        {/* Emergency Contact */}
+        <div>
           <label className="block text-gray-700 font-medium mb-2">Emergency Contact</label>
           <input
             type="text"
@@ -353,132 +431,36 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
   );
 };
 
-// Paginated Leave Balance Tab Component
+// Leave Balance Tab Component
 interface LeaveBalanceTabProps {
   employee: Employee;
-  employees: Employee[];
-  setEmployees: React.Dispatch<React.SetStateAction<Employee[]>>;
 }
 
-const LeaveBalanceTab: React.FC<LeaveBalanceTabProps> = ({ employee, employees, setEmployees }) => {
+const LeaveBalanceTab: React.FC<LeaveBalanceTabProps> = ({ employee }) => {
+  const { data: leaveBalanceData, isLoading, refetch } = useLeaveBalance(employee.id);
+  const updateLeaveBalanceMutation = useUpdateLeaveBalance();
+
   const [leaveBalance, setLeaveBalance] = useState({
-    casual: employee?.leaveBalance?.casual || 12,
-    sick: employee?.leaveBalance?.sick || 8,
-    earned: employee?.leaveBalance?.earned || 20,
-    maternity: employee?.leaveBalance?.maternity || 90,
-    paternity: employee?.leaveBalance?.paternity || 7,
-    bereavement: employee?.leaveBalance?.bereavement || 7
+    casual: 12,
+    sick: 8,
+    earned: 20,
+    maternity: 90,
+    paternity: 7,
+    bereavement: 7
   });
 
-  // Mock leave history data (latest first)
-  const allLeaveHistory = [
-    {
-      id: 1,
-      type: 'Casual' as 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Paternity' | 'Bereavement',
-      startDate: '2024-02-15',
-      endDate: '2024-02-17',
-      days: 3,
-      reason: 'Family function',
-      status: 'approved' as 'approved'
-    },
-    {
-      id: 2,
-      type: 'Sick' as 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Paternity' | 'Bereavement',
-      startDate: '2024-02-10',
-      endDate: '2024-02-12',
-      days: 3,
-      reason: 'Flu',
-      status: 'approved' as 'approved'
-    },
-    {
-      id: 3,
-      type: 'Earned' as 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Paternity' | 'Bereavement',
-      startDate: '2024-02-01',
-      endDate: '2024-02-07',
-      days: 7,
-      reason: 'Vacation',
-      status: 'approved' as 'approved'
-    },
-    {
-      id: 4,
-      type: 'Casual' as 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Paternity' | 'Bereavement',
-      startDate: '2024-01-25',
-      endDate: '2024-01-26',
-      days: 2,
-      reason: 'Personal work',
-      status: 'approved' as 'approved'
-    },
-    {
-      id: 5,
-      type: 'Sick' as 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Paternity' | 'Bereavement',
-      startDate: '2024-01-20',
-      endDate: '2024-01-21',
-      days: 2,
-      reason: 'Fever',
-      status: 'approved' as 'approved'
-    },
-    {
-      id: 6,
-      type: 'Casual' as 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Paternity' | 'Bereavement',
-      startDate: '2024-01-15',
-      endDate: '2024-01-16',
-      days: 2,
-      reason: 'Doctor appointment',
-      status: 'approved' as 'approved'
-    },
-    {
-      id: 7,
-      type: 'Earned' as 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Paternity' | 'Bereavement',
-      startDate: '2024-01-10',
-      endDate: '2024-01-11',
-      days: 2,
-      reason: 'Family event',
-      status: 'approved' as 'approved'
-    },
-    {
-      id: 8,
-      type: 'Sick' as 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Paternity' | 'Bereavement',
-      startDate: '2024-01-05',
-      endDate: '2024-01-06',
-      days: 2,
-      reason: 'Migraine',
-      status: 'approved' as 'approved'
-    },
-    {
-      id: 9,
-      type: 'Casual' as 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Paternity' | 'Bereavement',
-      startDate: '2024-01-02',
-      endDate: '2024-01-03',
-      days: 2,
-      reason: 'Personal',
-      status: 'approved' as 'approved'
-    },
-    {
-      id: 10,
-      type: 'Earned' as 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Paternity' | 'Bereavement',
-      startDate: '2023-12-28',
-      endDate: '2023-12-29',
-      days: 2,
-      reason: 'Year end break',
-      status: 'approved' as 'approved'
-    },
-  ];
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 7;
-
-  // Calculate pagination
-  const totalPages = Math.ceil(allLeaveHistory.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentLeaveHistory = allLeaveHistory.slice(startIndex, endIndex);
-
-  const [newLeave, setNewLeave] = useState({
-    type: 'Casual' as 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Paternity' | 'Bereavement',
-    startDate: '',
-    endDate: '',
-    reason: ''
-  });
+  useEffect(() => {
+    if (leaveBalanceData) {
+      setLeaveBalance({
+        casual: leaveBalanceData.casual || 12,
+        sick: leaveBalanceData.sick || 8,
+        earned: leaveBalanceData.earned || 20,
+        maternity: leaveBalanceData.maternity || 90,
+        paternity: leaveBalanceData.paternity || 7,
+        bereavement: leaveBalanceData.bereavement || 7
+      });
+    }
+  }, [leaveBalanceData]);
 
   const handleLeaveBalanceChange = (type: string, value: string) => {
     const numValue = parseInt(value) || 0;
@@ -489,55 +471,47 @@ const LeaveBalanceTab: React.FC<LeaveBalanceTabProps> = ({ employee, employees, 
   };
 
   const handleSaveLeaveBalance = () => {
-    if (employee) {
-      setEmployees(prev => prev.map(emp =>
-        emp.id === employee.id
-          ? { ...emp, leaveBalance }
-          : emp
-      ));
-      alert('Leave balance updated successfully!');
-    }
-  };
-
-  const handleAddLeave = () => {
-    if (!newLeave.startDate || !newLeave.endDate) {
-      alert('Please select start and end dates');
-      return;
-    }
-
-    const start = new Date(newLeave.startDate);
-    const end = new Date(newLeave.endDate);
-    const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-    const newLeaveEntry = {
-      id: Date.now(),
-      type: newLeave.type,
-      startDate: newLeave.startDate,
-      endDate: newLeave.endDate,
-      days: daysDiff,
-      reason: newLeave.reason,
-      status: 'approved' as 'approved'
-    };
-
-    // Add to beginning of array (latest first)
-    allLeaveHistory.unshift(newLeaveEntry);
-
-    // Deduct from balance
-    setLeaveBalance(prev => ({
-      ...prev,
-      [newLeave.type.toLowerCase()]: Math.max(0, (prev[newLeave.type.toLowerCase() as keyof typeof prev] as number) - daysDiff)
-    }));
-
-    setNewLeave({
-      type: 'Casual',
-      startDate: '',
-      endDate: '',
-      reason: ''
+    updateLeaveBalanceMutation.mutate({
+      employeeId: employee.id,
+      data: leaveBalance
+    }, {
+      onSuccess: () => {
+        alert('Leave balance updated successfully!');
+        refetch();
+      },
+      onError: (error: any) => {
+        alert(error.response?.data?.message || 'Failed to update leave balance');
+      }
     });
-
-    // Reset to first page to show the newly added leave
-    setCurrentPage(1);
   };
+
+  // Mock leave history data
+  const allLeaveHistory = [
+    {
+      id: 1,
+      type: 'Casual' as const,
+      startDate: '2024-02-15',
+      endDate: '2024-02-17',
+      days: 3,
+      reason: 'Family function',
+      status: 'approved' as const
+    },
+    // ... other mock data
+  ];
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 7;
+  const totalPages = Math.ceil(allLeaveHistory.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentLeaveHistory = allLeaveHistory.slice(startIndex, endIndex);
+
+  const [newLeave, setNewLeave] = useState({
+    type: 'Casual' as const,
+    startDate: '',
+    endDate: '',
+    reason: ''
+  });
 
   const getLeaveTypeColor = (type: string) => {
     switch (type) {
@@ -553,84 +527,45 @@ const LeaveBalanceTab: React.FC<LeaveBalanceTabProps> = ({ employee, employees, 
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {Object.entries(leaveBalance).map(([type, days]) => (
-          <div key={type} className="bg-gray-50 rounded-xl p-4">
-            <div className="flex justify-between items-center mb-2">
-              <span className="font-medium text-gray-700 capitalize">{type}</span>
-              <input
-                type="number"
-                value={days}
-                onChange={(e) => handleLeaveBalanceChange(type, e.target.value)}
-                className="w-20 px-2 py-1 border border-gray-300 rounded text-right"
-                min="0"
-              />
-            </div>
-            <div className="text-2xl font-bold text-purple-600">{days} days</div>
-            <div className="text-xs text-gray-500 mt-1">Available balance</div>
+      {isLoading ? (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Loading leave balance...</p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Object.entries(leaveBalance).map(([type, days]) => (
+              <div key={type} className="bg-gray-50 rounded-xl p-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-medium text-gray-700 capitalize">{type}</span>
+                  <input
+                    type="number"
+                    value={days}
+                    onChange={(e) => handleLeaveBalanceChange(type, e.target.value)}
+                    className="w-20 px-2 py-1 border border-gray-300 rounded text-right"
+                    min="0"
+                  />
+                </div>
+                <div className="text-2xl font-bold text-purple-600">{days} days</div>
+                <div className="text-xs text-gray-500 mt-1">Available balance</div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      <div className="flex justify-end">
-        <button
-          onClick={handleSaveLeaveBalance}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer"
-        >
-          Update Balance
-        </button>
-      </div>
+          <div className="flex justify-end">
+            <button
+              onClick={handleSaveLeaveBalance}
+              disabled={updateLeaveBalanceMutation.isPending}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {updateLeaveBalanceMutation.isPending ? 'Updating...' : 'Update Balance'}
+            </button>
+          </div>
+        </>
+      )}
 
-      {/* Add New Leave Section */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6">
-        <h4 className="font-semibold text-gray-800 mb-4">Add Leave History</h4>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <select
-            value={newLeave.type}
-            onChange={(e) => setNewLeave({ ...newLeave, type: e.target.value as any })}
-            className="px-3 py-2 border border-gray-300 rounded-lg"
-          >
-            <option value="Casual">Casual Leave</option>
-            <option value="Sick">Sick Leave</option>
-            <option value="Earned">Earned Leave</option>
-            <option value="Maternity">Maternity Leave</option>
-            <option value="Paternity">Paternity Leave</option>
-            <option value="Bereavement">Bereavement Leave</option>
-          </select>
-
-          <input
-            type="date"
-            value={newLeave.startDate}
-            onChange={(e) => setNewLeave({ ...newLeave, startDate: e.target.value })}
-            className="px-3 py-2 border border-gray-300 rounded-lg"
-          />
-
-          <input
-            type="date"
-            value={newLeave.endDate}
-            onChange={(e) => setNewLeave({ ...newLeave, endDate: e.target.value })}
-            className="px-3 py-2 border border-gray-300 rounded-lg"
-          />
-
-          <button
-            onClick={handleAddLeave}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition cursor-pointer"
-          >
-            Add Leave
-          </button>
-        </div>
-        <div className="mt-3">
-          <input
-            type="text"
-            value={newLeave.reason}
-            onChange={(e) => setNewLeave({ ...newLeave, reason: e.target.value })}
-            placeholder="Reason for leave"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-          />
-        </div>
-      </div>
-
-      {/* Leave History */}
+      {/* Leave History Section */}
       <div>
         <div className="flex justify-between items-center mb-4">
           <h4 className="font-semibold text-gray-800">Leave History</h4>
@@ -681,8 +616,8 @@ const LeaveBalanceTab: React.FC<LeaveBalanceTabProps> = ({ employee, employees, 
                   <td className="px-4 py-3 text-sm text-gray-600">{leave.reason}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${leave.status === 'approved' ? 'bg-green-100 text-green-700' :
-                        leave.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
+                      leave.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
                       }`}>
                       {leave.status}
                     </span>
@@ -703,7 +638,6 @@ interface EmployeeFullInfoTabProps {
 }
 
 const EmployeeFullInfoTab: React.FC<EmployeeFullInfoTabProps> = ({ employee }) => {
-  // Add null check
   if (!employee) {
     return (
       <div className="text-center py-12">
@@ -723,7 +657,7 @@ const EmployeeFullInfoTab: React.FC<EmployeeFullInfoTabProps> = ({ employee }) =
         <div className="space-y-3">
           <div className="flex justify-between py-2 border-b border-gray-100">
             <span className="text-gray-600">Full Name</span>
-            <span className="font-medium">{employee.name || 'Not provided'}</span>
+            <span className="font-medium">{employee.name || `${employee.firstName} ${employee.lastName}`}</span>
           </div>
           <div className="flex justify-between py-2 border-b border-gray-100">
             <span className="text-gray-600">Personal Email</span>
@@ -750,7 +684,7 @@ const EmployeeFullInfoTab: React.FC<EmployeeFullInfoTabProps> = ({ employee }) =
         <div className="space-y-3">
           <div className="flex justify-between py-2 border-b border-gray-100">
             <span className="text-gray-600">Employee ID</span>
-            <span className="font-medium">EMP-{(employee.id || '').toString().padStart(4, '0')}</span>
+            <span className="font-medium">{employee.employeeId || employee.empId || `EMP-${employee.id.toString().padStart(4, '0')}`}</span>
           </div>
           <div className="flex justify-between py-2 border-b border-gray-100">
             <span className="text-gray-600">Department</span>
@@ -765,11 +699,26 @@ const EmployeeFullInfoTab: React.FC<EmployeeFullInfoTabProps> = ({ employee }) =
             <span className="font-medium">{employee.orgEmail || 'Not provided'}</span>
           </div>
           <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Organization Password</span>
-            <span className="font-medium flex items-center gap-2">
-              {employee.orgPassword ? '••••••••' : 'Not provided'}
-              {employee.orgPassword && <Lock className="w-4 h-4 text-gray-400" />}
+            <span className="text-gray-600 flex items-center gap-2">
+              <Cake className="w-4 h-4 text-purple-600" />
+              Date of Birth
             </span>
+            <span className="font-medium">
+              {employee.birthday ? new Date(employee.birthday).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              }) : 'Not provided'}
+            </span>
+          </div>
+          <div className="flex justify-between py-2 border-b border-gray-100">
+            <span className="text-gray-600">Organization Password</span>
+            <div className="flex items-center gap-2">
+              <span className="font-medium">
+                {employee.orgPassword}
+              </span>
+              {employee.orgPassword && <Lock className="w-4 h-4 text-gray-400" />}
+            </div>
           </div>
           <div className="flex justify-between py-2 border-b border-gray-100">
             <span className="text-gray-600">Join Date</span>
@@ -796,16 +745,12 @@ interface EmployeeLeaveHistoryTabProps {
 
 const EmployeeLeaveHistoryTab: React.FC<EmployeeLeaveHistoryTabProps> = ({ employee, leaveRequests = [] }) => {
   const employeeLeaves = leaveRequests.filter(leave => leave.empId === employee.id);
-
-  // Sort by applied date descending (latest first)
   const sortedLeaves = [...employeeLeaves].sort((a, b) =>
     new Date(b.appliedDate).getTime() - new Date(a.appliedDate).getTime()
   );
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 7;
-
-  // Calculate pagination
   const totalPages = Math.ceil(sortedLeaves.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
@@ -884,69 +829,67 @@ const EmployeeLeaveHistoryTab: React.FC<EmployeeLeaveHistoryTabProps> = ({ emplo
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Type</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Date Range</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Days</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Reason</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Applied On</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {currentLeaves.map((leave) => (
-                <tr key={leave.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${getLeaveTypeColor(leave.type)}`}>
-                      {leave.type}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {new Date(leave.from).toLocaleDateString()} - {new Date(leave.to).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 font-medium">{leave.days} days</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{leave.reason}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${leave.status === 'approved' ? 'bg-green-100 text-green-700' :
+        {sortedLeaves.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No leave history found</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Type</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Date Range</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Days</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Reason</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Applied On</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {currentLeaves.map((leave) => (
+                  <tr key={leave.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${getLeaveTypeColor(leave.type)}`}>
+                        {leave.type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {new Date(leave.from).toLocaleDateString()} - {new Date(leave.to).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 font-medium">{leave.days} days</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{leave.reason}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${leave.status === 'approved' ? 'bg-green-100 text-green-700' :
                         leave.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
                           'bg-red-100 text-red-700'
-                      }`}>
-                      {leave.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {new Date(leave.appliedDate).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                        }`}>
+                        {leave.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      {new Date(leave.appliedDate).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 // Employee Attendance Tab Component
-interface EmployeeAttendanceTabProps {
-  employee: Employee;
-}
-
-const EmployeeAttendanceTab: React.FC<EmployeeAttendanceTabProps> = ({ employee }) => {
-  // Mock attendance data for multiple months
+const EmployeeAttendanceTab: React.FC = () => {
+  // Mock attendance data
   const generateAttendanceData = () => {
     const data = [];
-    const months = ['January', 'February', 'March', 'April', 'May'];
-
     for (let month = 0; month < 5; month++) {
       for (let day = 1; day <= 30; day++) {
         const date = new Date(2024, month, day);
         const dayOfWeek = date.getDay();
-
-        // Skip weekends (optional)
         if (dayOfWeek === 0 || dayOfWeek === 6) continue;
 
         const statuses = ['present', 'present', 'present', 'present', 'late', 'leave'];
@@ -961,41 +904,33 @@ const EmployeeAttendanceTab: React.FC<EmployeeAttendanceTabProps> = ({ employee 
         });
       }
     }
-
-    // Sort by date descending (latest first)
     return data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
   const allAttendanceData = generateAttendanceData();
-
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 7;
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
-  // Calculate pagination for table
   const totalPages = Math.ceil(allAttendanceData.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentAttendanceData = allAttendanceData.slice(startIndex, endIndex);
 
-  // Filter attendance data for current month for calendar
   const currentMonthAttendance = allAttendanceData.filter(record => {
     const date = new Date(record.date);
     return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
   });
 
-  // Get days in month
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
 
-  // Month names
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
-  // Navigation functions
   const prevMonth = () => {
     if (currentMonth === 0) {
       setCurrentMonth(11);
@@ -1014,7 +949,6 @@ const EmployeeAttendanceTab: React.FC<EmployeeAttendanceTabProps> = ({ employee 
     }
   };
 
-  // Calculate statistics for current month
   const stats = {
     present: currentMonthAttendance.filter(a => a.status === 'present').length,
     late: currentMonthAttendance.filter(a => a.status === 'late').length,
@@ -1043,12 +977,12 @@ const EmployeeAttendanceTab: React.FC<EmployeeAttendanceTabProps> = ({ employee 
         </div>
         <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl p-6">
           <div className="text-sm text-purple-600">Total Hours</div>
-          <div className="text-2xl font-bold text-purple-700">{stats.totalHours}</div>
+          <div className="text-2xl font-bold text-purple-700">{stats.totalHours.toFixed(1)}</div>
           <div className="text-xs text-purple-500 mt-1">This month</div>
         </div>
       </div>
 
-      {/* Attendance Calendar View */}
+      {/* Attendance Calendar */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-semibold text-gray-800">Attendance Calendar - {monthNames[currentMonth]} {currentYear}</h4>
@@ -1078,12 +1012,10 @@ const EmployeeAttendanceTab: React.FC<EmployeeAttendanceTabProps> = ({ employee 
             </div>
           ))}
 
-          {/* Empty cells for days before the first day of month */}
           {Array.from({ length: firstDayOfMonth }).map((_, i) => (
             <div key={`empty-${i}`} className="h-10 bg-gray-50 rounded-lg" />
           ))}
 
-          {/* Days of the month */}
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
             const date = new Date(currentYear, currentMonth, day);
@@ -1094,9 +1026,9 @@ const EmployeeAttendanceTab: React.FC<EmployeeAttendanceTabProps> = ({ employee 
 
             return (
               <div key={day} className={`h-10 rounded-lg flex items-center justify-center relative ${status === 'present' ? 'bg-green-100 text-green-700' :
-                  status === 'late' ? 'bg-yellow-100 text-yellow-700' :
-                    status === 'leave' ? 'bg-blue-100 text-blue-700' :
-                      'bg-gray-100 text-gray-400'
+                status === 'late' ? 'bg-yellow-100 text-yellow-700' :
+                  status === 'leave' ? 'bg-blue-100 text-blue-700' :
+                    'bg-gray-100 text-gray-400'
                 } ${isToday ? 'ring-2 ring-purple-500 ring-offset-1' : ''}`}>
                 {day}
                 {attendance && (
@@ -1178,8 +1110,8 @@ const EmployeeAttendanceTab: React.FC<EmployeeAttendanceTabProps> = ({ employee 
                   <td className="px-4 py-3 font-medium">{attendance.checkOut}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${attendance.status === 'present' ? 'bg-green-100 text-green-700' :
-                        attendance.status === 'late' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-blue-100 text-blue-700'
+                      attendance.status === 'late' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-blue-100 text-blue-700'
                       }`}>
                       {attendance.status.charAt(0).toUpperCase() + attendance.status.slice(1)}
                     </span>
@@ -1200,13 +1132,24 @@ const EmployeeAttendanceTab: React.FC<EmployeeAttendanceTabProps> = ({ employee 
 };
 
 // Main EmployeesPage Component
-const EmployeesPage = ({
-  employees: initialEmployees,
-  setEmployees,
-  departments: initialDepartments = ['Engineering', 'Design', 'Marketing', 'Sales', 'HR', 'Finance', 'Operations'],
-  positions: initialPositions = ['Developer', 'Designer', 'Manager', 'Analyst', 'Executive', 'Specialist'],
-  leaveRequests = []
-}: EmployeesPageProps) => {
+const EmployeesPage = () => {
+  // React Query hooks
+  const { data: employeesData, isLoading, error, refetch } = useEmployees();
+
+  const { data: departmentsData } = useDepartments();
+  const { data: positionsData } = usePositions();
+  const { data: leaveRequestsData } = useLeaves();
+
+  const employees = Array.isArray(employeesData) ? employeesData : [];
+  const departments = Array.isArray(departmentsData) ? departmentsData : (Array.isArray(departmentsData?.data) ? departmentsData.data : []);
+  const positions = Array.isArray(positionsData) ? positionsData : (Array.isArray(positionsData?.data) ? positionsData.data : []);
+  const leaveRequests = Array.isArray(leaveRequestsData) ? leaveRequestsData : (Array.isArray(leaveRequestsData?.data) ? leaveRequestsData.data : []);
+
+  const createEmployeeMutation = useCreateEmployee();
+  const updateEmployeeMutation = useUpdateEmployee();
+  const deleteEmployeeMutation = useDeleteEmployee();
+
+  // Local state
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     department: 'all',
@@ -1221,21 +1164,25 @@ const EmployeesPage = ({
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [newEmployee, setNewEmployee] = useState<NewEmployeeForm>({
-    name: '',
+    firstName: '',
+    lastName: '',
+    employeeId: '',
     email: '',
     orgEmail: '',
     orgPassword: '',
     phone: '',
     department: '',
+    birthday: null,
     position: '',
     joinDate: null,
+    leaveDate: null,
     location: '',
     emergencyContact: ''
   });
   const [isEditing, setIsEditing] = useState(false);
   const [exportFormat, setExportFormat] = useState<'csv' | 'pdf' | 'excel'>('csv');
-  const [departments, setDepartments] = useState<string[]>(initialDepartments);
-  const [positions, setPositions] = useState<string[]>(initialPositions);
+  const [departmentsState, setDepartmentsState] = useState<string[]>([]);
+  const [positionsState, setPositionsState] = useState<string[]>([]);
   const [showCustomDepartment, setShowCustomDepartment] = useState(false);
   const [showCustomPosition, setShowCustomPosition] = useState(false);
   const [customDepartment, setCustomDepartment] = useState('');
@@ -1245,11 +1192,88 @@ const EmployeesPage = ({
 
   const [startDate, endDate] = dateRange;
 
+
+
+
+  // Initialize departments and positions
+  useEffect(() => {
+    if (departments.length > 0) {
+      setDepartmentsState(departments);
+    } else {
+      // Default departments if API returns empty
+      setDepartmentsState(['Engineering', 'Design', 'Marketing', 'Sales', 'HR', 'Finance', 'Operations']);
+    }
+
+    if (positions.length > 0) {
+      setPositionsState(positions);
+    } else {
+      // Default positions if API returns empty
+      setPositionsState(['Developer', 'Designer', 'Manager', 'Analyst', 'Executive', 'Specialist']);
+    }
+  }, [departments, positions]);
+
+  useEffect(() => {
+    if (departments && Array.isArray(departments)) {
+      // Filter out null/undefined and ensure unique values
+      const uniqueDepartments = [...new Set(departments.filter(dept => dept && dept.trim() !== ''))];
+      setDepartmentsState(uniqueDepartments);
+    }
+
+    if (positions && Array.isArray(positions)) {
+      const uniquePositions = [...new Set(positions.filter(pos => pos && pos.trim() !== ''))];
+      setPositionsState(uniquePositions);
+    }
+  }, [departments, positions]);
+
+  const transformApiEmployee = (apiEmployee: any): Employee => {
+    if (!apiEmployee) return null;
+
+    return {
+      id: apiEmployee.id || 0,
+      firstName: apiEmployee.firstName || '',
+      lastName: apiEmployee.lastName || '',
+      name: `${apiEmployee.firstName || ''} ${apiEmployee.lastName || ''}`.trim(),
+      employeeId: apiEmployee.employeeId || `EMP-${apiEmployee.id?.toString().padStart(4, '0')}`,
+      email: apiEmployee.email || '',
+      orgEmail: apiEmployee.orgEmail || '',
+      orgPassword: apiEmployee.orgPassword || '', // This should be the actual password from API
+      phone: apiEmployee.phone || '',
+      department: apiEmployee.department || '',
+      position: apiEmployee.position || '',
+      joinDate: apiEmployee.joinDate || '',
+      leaveDate: apiEmployee.leaveDate,
+      birthday: apiEmployee.birthday,
+      avatar: apiEmployee.avatar || (apiEmployee.firstName ? apiEmployee.firstName.charAt(0).toUpperCase() : '?'),
+      location: apiEmployee.location || '',
+      emergencyContact: apiEmployee.emergencyContact || '',
+      isActive: apiEmployee.isActive !== undefined ? apiEmployee.isActive : true,
+      leaveBalance: apiEmployee.leaveBalance || {
+        casual: 0,
+        sick: 0,
+        earned: 0
+      }
+    };
+  };
+
+  const processedEmployees = React.useMemo(() => {
+    if (Array.isArray(employeesData)) {
+      return employeesData.map(transformApiEmployee);
+    }
+    return [];
+  }, [employeesData]);
+
+  useEffect(() => {
+    console.log('📊 Employees Data from API:', employeesData);
+    console.log('📊 Employees array:', employees);
+    console.log('📊 Processed employees:', processedEmployees);
+  }, [employeesData, employees, processedEmployees]);
+
   // Filter employees
-  const filteredEmployees = initialEmployees.filter(emp => {
-    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.position.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredEmployees = employees.filter(emp => {
+    const matchesSearch = emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.position?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      `${emp.firstName} ${emp.lastName}`.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesDepartment = filters.department === 'all' || emp.department === filters.department;
     const matchesPosition = filters.position === 'all' || emp.position === filters.position;
@@ -1261,35 +1285,30 @@ const EmployeesPage = ({
     return matchesSearch && matchesDepartment && matchesPosition && matchesDate;
   });
 
-  // Calculate statistics
-  const activeCount = initialEmployees.length; // All employees are active in this version
-  const totalSalary = initialEmployees.length; // Not using salary anymore
-
-  const departmentsWithCount = departments.map(dept => ({
-    name: dept,
-    count: initialEmployees.filter(e => e.department === dept).length
-  }));
-
   // Handle employee actions
   const handleViewEmployee = (employee: Employee) => {
     setSelectedEmployee(employee);
-    setViewModalTab('info'); // Reset to info tab
+    setViewModalTab('info');
     setShowEmployeeDetailsModal(true);
   };
 
-  const handleEditEmployee = (employee: Employee) => {
-    setNewEmployee({
-      name: employee.name || '',
-      email: employee.email || '',
-      orgEmail: employee.orgEmail || '',
-      orgPassword: employee.orgPassword || '',
-      phone: employee.phone || '',
-      department: employee.department || '',
-      position: employee.position || '',
-      joinDate: employee.joinDate ? new Date(employee.joinDate) : new Date(),
-      location: employee.location || '',
-      emergencyContact: employee.emergencyContact || ''
-    });
+const handleEditEmployee = (employee: Employee) => {
+  setNewEmployee({
+    firstName: employee.firstName || '',
+    lastName: employee.lastName || '',
+    employeeId: employee.employeeId || `EMP-${employee.id.toString().padStart(4, '0')}`,
+    email: employee.email || '',
+    orgEmail: employee.orgEmail || '',
+    orgPassword: '', // Leave empty or show placeholder
+    phone: employee.phone || '',
+    department: employee.department || '',
+    position: employee.position || '',
+    joinDate: employee.joinDate ? new Date(employee.joinDate) : new Date(),
+    leaveDate: employee.leaveDate ? new Date(employee.leaveDate) : null,
+    birthday: employee.birthday ? new Date(employee.birthday) : null,
+    location: employee.location || '',
+    emergencyContact: employee.emergencyContact || ''
+  });
     setSelectedEmployee(employee);
     setIsEditing(true);
     setActiveEditTab('info');
@@ -1297,6 +1316,7 @@ const EmployeesPage = ({
   };
 
   // Safe avatar getter
+  // Update the getEmployeeAvatar function:
   const getEmployeeAvatar = (employee: Employee | string | null) => {
     if (!employee) return '?';
 
@@ -1304,8 +1324,13 @@ const EmployeesPage = ({
       return employee.trim().charAt(0).toUpperCase() || '?';
     }
 
+    // Try in order: avatar, firstName, name
     if (employee.avatar && employee.avatar.trim() !== '') {
       return employee.avatar.trim().charAt(0).toUpperCase();
+    }
+
+    if (employee.firstName && employee.firstName.trim() !== '') {
+      return employee.firstName.trim().charAt(0).toUpperCase();
     }
 
     if (employee.name && employee.name.trim() !== '') {
@@ -1316,7 +1341,7 @@ const EmployeesPage = ({
   };
 
   const handleDeleteEmployee = (id: number) => {
-    const employeeToDelete = initialEmployees.find(e => e.id === id);
+    const employeeToDelete = employees.find(e => e.id === id);
     if (employeeToDelete) {
       setSelectedEmployee(employeeToDelete);
       setShowDeleteModal(true);
@@ -1325,15 +1350,24 @@ const EmployeesPage = ({
 
   const confirmDelete = () => {
     if (selectedEmployee) {
-      setEmployees(prev => prev.filter(e => e.id !== selectedEmployee.id));
-      setShowDeleteModal(false);
-      setSelectedEmployee(null);
+      deleteEmployeeMutation.mutate(selectedEmployee.id, {
+        onSuccess: () => {
+          setShowDeleteModal(false);
+          setSelectedEmployee(null);
+          refetch();
+        },
+        onError: (error: any) => {
+          alert(error.response?.data?.message || 'Failed to delete employee');
+        }
+      });
     }
   };
 
   const handleAddEmployee = () => {
     setNewEmployee({
-      name: '',
+      firstName: '',
+      lastName: '',
+      employeeId: '',
       email: '',
       orgEmail: '',
       orgPassword: '',
@@ -1341,6 +1375,7 @@ const EmployeesPage = ({
       department: '',
       position: '',
       joinDate: null,
+      leaveDate: null,
       location: '',
       emergencyContact: ''
     });
@@ -1353,9 +1388,9 @@ const EmployeesPage = ({
   };
 
   const handleAddCustomDepartment = () => {
-    if (customDepartment.trim() && !departments.includes(customDepartment.trim())) {
+    if (customDepartment.trim() && !departmentsState.includes(customDepartment.trim())) {
       const newDept = customDepartment.trim();
-      setDepartments(prev => [...prev, newDept]);
+      setDepartmentsState(prev => [...prev, newDept]);
       setNewEmployee(prev => ({ ...prev, department: newDept }));
       setCustomDepartment('');
       setShowCustomDepartment(false);
@@ -1363,9 +1398,9 @@ const EmployeesPage = ({
   };
 
   const handleAddCustomPosition = () => {
-    if (customPosition.trim() && !positions.includes(customPosition.trim())) {
+    if (customPosition.trim() && !positionsState.includes(customPosition.trim())) {
       const newPos = customPosition.trim();
-      setPositions(prev => [...prev, newPos]);
+      setPositionsState(prev => [...prev, newPos]);
       setNewEmployee(prev => ({ ...prev, position: newPos }));
       setCustomPosition('');
       setShowCustomPosition(false);
@@ -1373,48 +1408,64 @@ const EmployeesPage = ({
   };
 
   const handleSaveEmployee = () => {
-    if (!newEmployee.name || !newEmployee.email || !newEmployee.orgEmail || !newEmployee.orgPassword || !newEmployee.department || !newEmployee.position) {
+    if (!newEmployee.firstName || !newEmployee.lastName || !newEmployee.employeeId ||
+      !newEmployee.email || !newEmployee.orgEmail || !newEmployee.orgPassword ||
+      !newEmployee.department || !newEmployee.position) {
       alert('Please fill in all required fields');
       return;
     }
 
-    const employeeData: Employee = {
-      id: isEditing && selectedEmployee ? selectedEmployee.id : Date.now(),
-      name: newEmployee.name.trim(),
+    const employeeData = {
+      firstName: newEmployee.firstName.trim(),
+      lastName: newEmployee.lastName.trim(),
+      employeeId: newEmployee.employeeId.trim(),
       email: newEmployee.email.trim(),
       orgEmail: newEmployee.orgEmail.trim(),
       orgPassword: newEmployee.orgPassword.trim(),
       phone: newEmployee.phone.trim(),
       department: newEmployee.department,
       position: newEmployee.position,
-      joinDate: newEmployee.joinDate ?
-        newEmployee.joinDate.toISOString().split('T')[0] :
-        new Date().toISOString().split('T')[0],
-      avatar: newEmployee.name.charAt(0).toUpperCase(),
+      joinDate: newEmployee.joinDate?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
+      leaveDate: newEmployee.leaveDate?.toISOString().split('T')[0] || undefined,
+      birthday: newEmployee.birthday?.toISOString().split('T')[0] || undefined,
       location: newEmployee.location.trim(),
-      emergencyContact: newEmployee.emergencyContact.trim(),
-      leaveBalance: selectedEmployee?.leaveBalance || {
-        casual: 12,
-        sick: 8,
-        earned: 20
-      }
+      emergencyContact: newEmployee.emergencyContact.trim()
     };
 
     if (isEditing && selectedEmployee) {
-      setEmployees(prev => prev.map(e => e.id === selectedEmployee.id ?
-        { ...e, ...employeeData } : e));
+      updateEmployeeMutation.mutate({
+        id: selectedEmployee.id,
+        data: employeeData
+      }, {
+        onSuccess: () => {
+          setShowEmployeeModal(false);
+          resetNewEmployeeForm();
+          setSelectedEmployee(null);
+          refetch();
+        },
+        onError: (error: any) => {
+          alert(error.response?.data?.message || 'Failed to update employee');
+        }
+      });
     } else {
-      setEmployees(prev => [...prev, employeeData]);
+      createEmployeeMutation.mutate(employeeData, {
+        onSuccess: () => {
+          setShowEmployeeModal(false);
+          resetNewEmployeeForm();
+          refetch();
+        },
+        onError: (error: any) => {
+          alert(error.response?.data?.message || 'Failed to create employee');
+        }
+      });
     }
-
-    setShowEmployeeModal(false);
-    resetNewEmployeeForm();
-    setSelectedEmployee(null);
   };
 
   const resetNewEmployeeForm = () => {
     setNewEmployee({
-      name: '',
+      firstName: '',
+      lastName: '',
+      employeeId: '',
       email: '',
       orgEmail: '',
       orgPassword: '',
@@ -1422,6 +1473,7 @@ const EmployeesPage = ({
       department: '',
       position: '',
       joinDate: null,
+      leaveDate: null,
       location: '',
       emergencyContact: ''
     });
@@ -1454,13 +1506,12 @@ const EmployeesPage = ({
     return colors[dept] || 'bg-gray-100 text-gray-700';
   };
 
-  // Clear date range
   const clearDateRange = () => {
     setDateRange([null, null]);
   };
 
   // Animation variants
-  const containerVariants = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
@@ -1470,7 +1521,7 @@ const EmployeesPage = ({
     }
   };
 
-  const itemVariants = {
+  const itemVariants: Variants = {
     hidden: { y: 20, opacity: 0 },
     visible: {
       y: 0,
@@ -1478,7 +1529,7 @@ const EmployeesPage = ({
     }
   };
 
-  const modalVariants = {
+  const modalVariants: Variants = {
     hidden: { opacity: 0, scale: 0.95 },
     visible: {
       opacity: 1,
@@ -1503,8 +1554,8 @@ const EmployeesPage = ({
               {getEmployeeAvatar(employee)}
             </div>
             <div>
-              <h4 className="font-semibold text-gray-800">{employee?.name || 'Unknown Employee'}</h4>
-              <p className="text-gray-600 text-sm">{employee?.position || 'N/A'}</p>
+              <h4 className="font-semibold text-gray-800">{employee.name || `${employee.firstName} ${employee.lastName}`}</h4>
+              <p className="text-gray-600 text-sm">{employee.position || 'N/A'}</p>
             </div>
           </div>
           <CheckCircle className="w-5 h-5 text-green-500" />
@@ -1513,20 +1564,20 @@ const EmployeesPage = ({
         <div className="space-y-2 mb-4">
           <div className="flex items-center gap-2 text-sm">
             <Mail className="w-4 h-4 text-gray-400" />
-            <span className="text-gray-600 truncate">{employee?.email || 'No email'}</span>
+            <span className="text-gray-600 truncate">{employee.email || 'No email'}</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
             <Building className="w-4 h-4 text-gray-400" />
-            <span className="text-gray-600">{employee?.department || 'N/A'}</span>
+            <span className="text-gray-600">{employee.department || 'N/A'}</span>
           </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Lock className="w-4 h-4 text-gray-400" />
-            <span className="text-gray-600">{employee?.orgEmail || 'No org email'}</span>
-          </div>
+          <div className="flex items-center gap-1">
+  <Lock className="w-4 h-4 text-gray-400" />
+  <span className="text-gray-600">{employee.orgEmail || 'No org email'}</span>
+</div>
           <div className="flex items-center gap-2 text-sm">
             <Calendar className="w-4 h-4 text-gray-400" />
             <span className="text-gray-600">
-              {employee?.joinDate ? new Date(employee.joinDate).toLocaleDateString('en-US', {
+              {employee.joinDate ? new Date(employee.joinDate).toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
                 year: 'numeric'
@@ -1536,27 +1587,25 @@ const EmployeesPage = ({
         </div>
 
         <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-            Active
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${employee.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+            {employee.isActive ? 'Active' : 'Inactive'}
           </span>
           <div className="flex items-center gap-1">
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
-              onClick={() => employee && handleEditEmployee(employee)}
+              onClick={() => handleEditEmployee(employee)}
               className="p-1 text-yellow-600 hover:bg-yellow-100 rounded-lg transition cursor-pointer"
               title="Edit"
-              disabled={!employee}
             >
               <Edit className="w-4 h-4" />
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
-              onClick={() => employee && handleDeleteEmployee(employee.id)}
+              onClick={() => handleDeleteEmployee(employee.id)}
               className="p-1 text-red-600 hover:bg-red-100 rounded-lg transition cursor-pointer"
               title="Delete"
-              disabled={!employee}
             >
               <Trash2 className="w-4 h-4" />
             </motion.button>
@@ -1565,6 +1614,34 @@ const EmployeesPage = ({
       </motion.div>
     );
   };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading employees...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+        <h3 className="text-red-800 font-semibold">Error loading employees</h3>
+        <p className="text-red-600 mt-2">Please try again later.</p>
+        <button
+          onClick={() => refetch()}
+          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition cursor-pointer"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -1595,10 +1672,11 @@ const EmployeesPage = ({
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleAddEmployee}
-            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl font-semibold hover:shadow-lg transition cursor-pointer flex items-center gap-2"
+            disabled={createEmployeeMutation.isPending}
+            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl font-semibold hover:shadow-lg transition cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <UserPlus className="w-5 h-5" />
-            Add Employee
+            {createEmployeeMutation.isPending ? 'Adding...' : 'Add Employee'}
           </motion.button>
         </div>
       </motion.div>
@@ -1615,8 +1693,8 @@ const EmployeesPage = ({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-500 text-sm">Total Employees</p>
-              <p className="text-3xl font-bold text-blue-600 mt-1">{initialEmployees.length}</p>
-              <p className="text-gray-400 text-sm mt-1">Across all departments</p>
+              <p className="text-3xl font-bold text-blue-600 mt-1">{processedEmployees.length}</p>
+              <p className="text-gray-400 text-sm mt-1">Across all depart ments</p>
             </div>
             <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-400 rounded-xl flex items-center justify-center shadow-lg">
               <Users className="w-6 h-6 text-white" />
@@ -1631,8 +1709,7 @@ const EmployeesPage = ({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-500 text-sm">Position Types</p>
-              <p className="text-3xl font-bold text-amber-600 mt-1">{positions.length}</p>
-
+              <p className="text-3xl font-bold text-amber-600 mt-1">{positionsState.length}</p>
             </div>
             <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-amber-400 rounded-xl flex items-center justify-center shadow-lg">
               <Briefcase className="w-6 h-6 text-white" />
@@ -1646,10 +1723,8 @@ const EmployeesPage = ({
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-sm">Total Department</p>
-              <p className="text-3xl font-bold text-purple-600 mt-1">
-                07
-              </p>
+              <p className="text-gray-500 text-sm">Total Departments</p>
+              <p className="text-3xl font-bold text-purple-600 mt-1">{departmentsState.length}</p>
             </div>
             <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-400 rounded-xl flex items-center justify-center shadow-lg">
               <Building className="w-6 h-6 text-white" />
@@ -1706,7 +1781,7 @@ const EmployeesPage = ({
                 className="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#6B8DA2] bg-white"
               >
                 <option value="all">All Departments</option>
-                {departments.map(dept => (
+                {departmentsState.map(dept => (
                   <option key={dept} value={dept}>{dept}</option>
                 ))}
               </select>
@@ -1718,7 +1793,7 @@ const EmployeesPage = ({
               className="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#6B8DA2] bg-white"
             >
               <option value="all">All Positions</option>
-              {positions.map(pos => (
+              {positionsState.map(pos => (
                 <option key={pos} value={pos}>{pos}</option>
               ))}
             </select>
@@ -1779,7 +1854,7 @@ const EmployeesPage = ({
                   </span>
                 </h3>
                 <p className="text-gray-500 text-sm mt-1">
-                  Showing {filteredEmployees.length} of {initialEmployees.length} employees
+                  Showing {filteredEmployees.length} of {employees.length} employees
                 </p>
               </div>
             </div>
@@ -1812,6 +1887,7 @@ const EmployeesPage = ({
                   ) : (
                     filteredEmployees.map((emp, index) => {
                       const isExpanded = expandedRows.has(emp.id);
+                      const employeeName = emp.name || `${emp.firstName} ${emp.lastName}`;
 
                       return (
                         <React.Fragment key={emp.id}>
@@ -1828,8 +1904,10 @@ const EmployeesPage = ({
                                   {getEmployeeAvatar(emp)}
                                 </div>
                                 <div>
-                                  <div className="font-medium text-gray-800">{emp?.name || 'Unknown Employee'}</div>
-                                  <div className="text-gray-500 text-xs">O-{(emp?.id || '').toString().padStart(4, '0')}</div>
+                                  <div className="font-medium text-gray-800">
+                                    {emp.name || `${emp.firstName} ${emp.lastName}`}
+                                  </div>
+                                  <div className="text-gray-500 text-xs">{emp.employeeId}</div>
                                 </div>
                               </div>
                             </td>
@@ -1842,7 +1920,7 @@ const EmployeesPage = ({
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
                                 <Lock className="w-4 h-4 text-gray-400" />
-                                <span className="text-gray-600">{emp.phone || 'No org email'}</span>
+                                <span className="text-gray-600">{emp.phone || 'No phone'}</span>
                               </div>
                             </td>
                             <td className="px-6 py-4 text-gray-600">
@@ -1958,7 +2036,7 @@ const EmployeesPage = ({
                                       </div>
                                       <div className="flex justify-between">
                                         <span className="text-sm text-gray-600">Join Date:</span>
-                                        <span className="text-sm font-medium">{emp.joinDate || 'N/A'}</span>
+                                        <span className="text-sm font-medium">{emp.joinDate ? new Date(emp.joinDate).toLocaleDateString() : 'N/A'}</span>
                                       </div>
                                       <div className="flex justify-between">
                                         <span className="text-sm text-gray-600">Org Password:</span>
@@ -2027,7 +2105,6 @@ const EmployeesPage = ({
         </motion.div>
       )}
 
-
       {/* Add/Edit Employee Modal */}
       <AnimatePresence>
         {showEmployeeModal && (
@@ -2086,18 +2163,14 @@ const EmployeesPage = ({
 
               {/* Modal Content */}
               <div className="p-6">
-                {isEditing && activeEditTab === 'leave' ? (
-                  <LeaveBalanceTab
-                    employee={selectedEmployee!}
-                    employees={initialEmployees}
-                    setEmployees={setEmployees}
-                  />
+                {isEditing && activeEditTab === 'leave' && selectedEmployee ? (
+                  <LeaveBalanceTab employee={selectedEmployee} />
                 ) : (
                   <EmployeeInfoTab
                     newEmployee={newEmployee}
                     setNewEmployee={setNewEmployee}
-                    departments={departments}
-                    positions={positions}
+                    departments={departmentsState}
+                    positions={positionsState}
                     showCustomDepartment={showCustomDepartment}
                     setShowCustomDepartment={setShowCustomDepartment}
                     showCustomPosition={showCustomPosition}
@@ -2118,9 +2191,12 @@ const EmployeesPage = ({
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={handleSaveEmployee}
-                    className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl font-semibold hover:shadow-lg transition cursor-pointer"
+                    disabled={createEmployeeMutation.isPending || updateEmployeeMutation.isPending}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl font-semibold hover:shadow-lg transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isEditing ? 'Update Employee' : 'Add Employee'}
+                    {isEditing
+                      ? (updateEmployeeMutation.isPending ? 'Updating...' : 'Update Employee')
+                      : (createEmployeeMutation.isPending ? 'Adding...' : 'Add Employee')}
                   </motion.button>
                   <button
                     onClick={() => {
@@ -2164,7 +2240,7 @@ const EmployeesPage = ({
                     {getEmployeeAvatar(selectedEmployee)}
                   </div>
                   <div>
-                    <p className="font-medium text-gray-800">{selectedEmployee.name || 'Unknown Employee'}</p>
+                    <p className="font-medium text-gray-800">{selectedEmployee.name || `${selectedEmployee.firstName} ${selectedEmployee.lastName}`}</p>
                     <p className="text-gray-600 text-sm">{selectedEmployee.position || 'N/A'} • {selectedEmployee.department || 'N/A'}</p>
                   </div>
                 </div>
@@ -2179,9 +2255,10 @@ const EmployeesPage = ({
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={confirmDelete}
-                  className="flex-1 px-6 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition cursor-pointer"
+                  disabled={deleteEmployeeMutation.isPending}
+                  className="flex-1 px-6 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Delete Employee
+                  {deleteEmployeeMutation.isPending ? 'Deleting...' : 'Delete Employee'}
                 </motion.button>
                 <button
                   onClick={() => setShowDeleteModal(false)}
@@ -2195,6 +2272,7 @@ const EmployeesPage = ({
         )}
       </AnimatePresence>
 
+      {/* Employee Details Modal */}
       <AnimatePresence>
         {showEmployeeDetailsModal && selectedEmployee && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -2212,7 +2290,9 @@ const EmployeesPage = ({
                       {getEmployeeAvatar(selectedEmployee)}
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold text-gray-800">{selectedEmployee.name}</h3>
+                      <h3 className="text-2xl font-bold text-gray-800">
+                        {selectedEmployee.name || `${selectedEmployee.firstName} ${selectedEmployee.lastName}`}
+                      </h3>
                       <p className="text-gray-600">{selectedEmployee.position} • {selectedEmployee.department}</p>
                     </div>
                   </div>
@@ -2270,7 +2350,7 @@ const EmployeesPage = ({
                 )}
 
                 {viewModalTab === 'attendance' && (
-                  <EmployeeAttendanceTab employee={selectedEmployee} />
+                  <EmployeeAttendanceTab />
                 )}
               </div>
             </motion.div>
@@ -2299,7 +2379,7 @@ const EmployeesPage = ({
                         key={format}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        onClick={() => setExportFormat(format as any)}
+                        onClick={() => setExportFormat(format as 'csv' | 'pdf' | 'excel')}
                         className={`px-4 py-3 rounded-lg border-2 cursor-pointer ${exportFormat === format
                           ? 'border-purple-600 bg-purple-50 text-purple-700'
                           : 'border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -2335,7 +2415,7 @@ const EmployeesPage = ({
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => {
-                    alert(`Exporting ${initialEmployees.length} employees in ${exportFormat.toUpperCase()} format...`);
+                    alert(`Exporting ${employees.length} employees in ${exportFormat.toUpperCase()} format...`);
                     setShowExportModal(false);
                   }}
                   className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-semibold hover:shadow-lg transition cursor-pointer"

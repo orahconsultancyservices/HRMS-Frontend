@@ -1,55 +1,67 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import {
   Gift, Calendar, ChevronLeft, ChevronRight,
   Cake, Crown, Search
 } from 'lucide-react';
+import { useBirthdays } from '../../hooks/useBirthdaysQuery';
 
-interface Employee {
+interface EmployeeWithBirthday {
   id: string;
   name: string;
   avatar: string;
   department: string;
   position: string;
   birthday: string;
+  birthMonth: number;
+  birthDay: number;
+  formattedDate: string;
 }
 
-interface UpcomingBirthdaysProps {
-  employees: Employee[];
-}
-
-const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
+const UpcomingBirthdays = () => {
+  const { data: employees, isLoading, isError } = useBirthdays();
   const [viewMode, setViewMode] = useState('upcoming');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [searchTerm, setSearchTerm] = useState('');
   const [currentYear] = useState(new Date().getFullYear());
 
-  // Get today's date in local timezone
   const today = new Date();
   const todayYear = today.getFullYear();
   const todayMonth = today.getMonth();
   const todayDate = today.getDate();
 
-  // Helper function to get month and date from birthday string
   const getBirthdayMonthDate = (birthdayStr: string) => {
-    const [year, month, day] = birthdayStr.split('-').map(Number);
+    if (!birthdayStr) {
+      return { month: 0, date: 1 };
+    }
+
+    const parts = birthdayStr.split('-');
+    if (parts.length < 3) {
+      return { month: 0, date: 1 };
+    }
+
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+
     return {
-      month: month - 1,
-      date: day
+      month: isNaN(month) ? 0 : month,
+      date: isNaN(day) ? 1 : day
     };
   };
 
-  // Helper function to format date
   const formatDateWithoutTimezone = (year: number, month: number, day: number) => {
-    const date = new Date(year, month, day);
+    const validMonth = month >= 0 && month <= 11 ? month : 0;
+    const validDay = day >= 1 && day <= 31 ? day : 1;
+
+    const date = new Date(year, validMonth, validDay);
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric'
     });
   };
 
-  // Animation variants
-  const containerVariants = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
@@ -57,19 +69,45 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
     }
   };
 
-  const itemVariants = {
+  const itemVariants: Variants = {
     hidden: { y: 20, opacity: 0 },
     visible: { y: 0, opacity: 1 }
   };
 
-  const monthCardVariants = {
+  const monthCardVariants: Variants = {
     hidden: { scale: 0.9, opacity: 0 },
     visible: { scale: 1, opacity: 1 },
     hover: { scale: 1.05, transition: { type: 'spring', stiffness: 300 } }
   };
 
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="bg-gradient-to-br from-white to-[#4A6A82]/10 rounded-2xl p-6 shadow-lg border border-[#4A6A82]/20">
+        <div className="flex items-center justify-center h-48 gap-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4A6A82]"></div>
+          <p className="text-gray-600">Loading birthdays...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (isError) {
+    return (
+      <div className="bg-gradient-to-br from-white to-[#4A6A82]/10 rounded-2xl p-6 shadow-lg border border-[#4A6A82]/20">
+        <div className="flex flex-col items-center justify-center h-48 gap-4">
+          <Gift className="w-12 h-12 text-gray-300" />
+          <p className="text-gray-600">Unable to load birthdays</p>
+        </div>
+      </div>
+    );
+  }
+
+  const employeesList = employees || [];
+
   // Group birthdays by month
-  const birthdaysByMonth = employees.reduce((acc: Employee[][], emp: Employee) => {
+  const birthdaysByMonth = employeesList.reduce((acc: EmployeeWithBirthday[][], emp) => {
     const bdayInfo = getBirthdayMonthDate(emp.birthday);
     const month = bdayInfo.month;
     if (!acc[month]) acc[month] = [];
@@ -80,18 +118,16 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
       formattedDate: formatDateWithoutTimezone(currentYear, bdayInfo.month, bdayInfo.date)
     });
     return acc;
-  }, Array(12).fill().map(() => []));
+  }, Array.from({ length: 12 }, () => []));
 
-  // Sort birthdays by date
-  birthdaysByMonth.forEach((month: any[]) => {
+  birthdaysByMonth.forEach((month: EmployeeWithBirthday[]) => {
     month.sort((a, b) => a.birthDay - b.birthDay);
   });
 
-  // Filter upcoming birthdays (next 30 days)
-  const upcomingBirthdays = employees
-    .map((emp: Employee) => {
+  // Filter upcoming birthdays
+  const upcomingBirthdays = employeesList
+    .map((emp) => {
       const bdayInfo = getBirthdayMonthDate(emp.birthday);
-
       const currentYearBday = new Date(todayYear, bdayInfo.month, bdayInfo.date);
       const todayDateObj = new Date(todayYear, todayMonth, todayDate);
 
@@ -100,7 +136,7 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
         nextBday = new Date(todayYear + 1, bdayInfo.month, bdayInfo.date);
       }
 
-      const diff = Math.ceil((nextBday - todayDateObj) / (1000 * 60 * 60 * 24));
+      const diff = Math.ceil((nextBday.getTime() - todayDateObj.getTime()) / (1000 * 60 * 60 * 24));
       const isToday = bdayInfo.month === todayMonth && bdayInfo.date === todayDate;
 
       return {
@@ -113,18 +149,16 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
         displayDate: formatDateWithoutTimezone(nextBday.getFullYear(), bdayInfo.month, bdayInfo.date)
       };
     })
-    .filter((emp: any) => emp.daysUntil <= 30)
-    .sort((a: any, b: any) => a.daysUntil - b.daysUntil)
+    .filter((emp) => emp.daysUntil <= 30)
+    .sort((a, b) => a.daysUntil - b.daysUntil)
     .slice(0, 10);
 
-  // Get today's birthdays
-  const todaysBirthdays = employees.filter((emp: Employee) => {
+  const todaysBirthdays = employeesList.filter((emp) => {
     const bdayInfo = getBirthdayMonthDate(emp.birthday);
     return bdayInfo.month === todayMonth && bdayInfo.date === todayDate;
   });
 
-  // Filter by search
-  const filteredBirthdays = upcomingBirthdays.filter((emp: any) =>
+  const filteredBirthdays = upcomingBirthdays.filter((emp) =>
     emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     emp.department.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -143,7 +177,7 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
   };
 
   const getDepartmentGradient = (department: string) => {
-    const gradients = {
+    const gradients: Record<string, string> = {
       'Engineering': 'from-[#4A6A82] to-[#7A9DB2]',
       'Design': 'from-[#F5A42C] to-[#F5B53C]',
       'Marketing': 'from-[#4A6A82] to-[#F5A42C]',
@@ -153,7 +187,7 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
       'Operations': 'from-[#4A6A82] to-[#5A7A8F]',
       'default': 'from-[#4A6A82] to-[#F5A42C]'
     };
-    return gradients[department as keyof typeof gradients] || gradients.default;
+    return gradients[department] || gradients.default;
   };
 
   const hasTodaysBirthdays = todaysBirthdays.length > 0;
@@ -187,15 +221,8 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
             </div>
             {hasTodaysBirthdays && (
               <motion.div
-                animate={{
-                  scale: [1, 1.2, 1],
-                  rotate: [0, 360]
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
+                animate={{ scale: [1, 1.2, 1], rotate: [0, 360] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                 className="absolute -top-2 -right-2"
               >
                 <Crown className="w-6 h-6 text-[#F5A42C]" />
@@ -205,10 +232,9 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Birthday Calendar</h1>
             <p className="text-gray-600">
-              {hasTodaysBirthdays ?
-                `Celebrating ${todaysBirthdays.length} birthday${todaysBirthdays.length > 1 ? 's' : ''} today!` :
-                'Celebrate with your colleagues'
-              }
+              {hasTodaysBirthdays
+                ? `Celebrating ${todaysBirthdays.length} birthday${todaysBirthdays.length > 1 ? 's' : ''} today!`
+                : 'Celebrate with your colleagues'}
             </p>
           </div>
         </div>
@@ -258,7 +284,7 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
             🎂 Today's Birthday Stars! 🎂
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {todaysBirthdays.map((emp: Employee, index: number) => (
+            {todaysBirthdays.map((emp, index) => (
               <motion.div
                 key={emp.id}
                 initial={{ opacity: 0, x: -20 }}
@@ -283,7 +309,7 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
       )}
 
       <AnimatePresence mode="wait">
-        {viewMode === 'upcoming' ? (
+        {viewMode === 'upcoming' && (
           <motion.div
             key="upcoming"
             initial={{ opacity: 0, y: 20 }}
@@ -292,12 +318,7 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
             className="space-y-4"
           >
             <div className="flex items-center justify-between mb-2">
-              {/* Use div with aria-label if it's not a main section heading */}
-              <div
-                className="font-semibold text-gray-600 flex items-center gap-2"
-                role="heading"
-                aria-level={3} // Set appropriate level
-              >
+              <div className="font-semibold text-gray-600 flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-[#4A6A82]" />
                 Next 30 Days
               </div>
@@ -367,8 +388,7 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
                             {getCelebrationEmoji(emp.daysUntil, emp.isToday)}
                           </span>
                           <div>
-                            <p className={`font-bold ${emp.isToday ? 'text-[#F5A42C]' : 'text-gray-800'
-                              }`}>
+                            <p className={`font-bold ${emp.isToday ? 'text-[#F5A42C]' : 'text-gray-800'}`}>
                               {emp.isToday ? (
                                 <span className="text-[#F5A42C]">Today! 🎂🎉</span>
                               ) : emp.daysUntil === 1 ? (
@@ -377,9 +397,7 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
                                 `In ${emp.daysUntil} days`
                               )}
                             </p>
-                            <p className="text-gray-600 text-sm">
-                              {emp.displayDate}
-                            </p>
+                            <p className="text-gray-600 text-sm">{emp.displayDate}</p>
                           </div>
                         </div>
                       </div>
@@ -407,7 +425,9 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
               </div>
             )}
           </motion.div>
-        ) : viewMode === 'monthly' ? (
+        )}
+
+        {viewMode === 'monthly' && (
           <motion.div
             key="monthly"
             initial={{ opacity: 0, y: 20 }}
@@ -446,10 +466,10 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
               {Array.from({ length: 31 }).map((_, day) => {
                 const dayNumber = day + 1;
                 const hasBirthday = birthdaysByMonth[selectedMonth].some(
-                  (emp: any) => emp.birthDay === dayNumber
+                  (emp: EmployeeWithBirthday) => emp.birthDay === dayNumber
                 );
                 const birthdayEmps = birthdaysByMonth[selectedMonth].filter(
-                  (emp: any) => emp.birthDay === dayNumber
+                  (emp: EmployeeWithBirthday) => emp.birthDay === dayNumber
                 );
                 const isToday = selectedMonth === todayMonth && dayNumber === todayDate;
 
@@ -474,9 +494,8 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
                     </div>
                     {hasBirthday && (
                       <div className="space-y-1">
-                        {birthdayEmps.slice(0, 2).map((emp: any) => {
-                          const isTodayBirthday = selectedMonth === todayMonth &&
-                            dayNumber === todayDate;
+                        {birthdayEmps.slice(0, 2).map((emp: EmployeeWithBirthday) => {
+                          const isTodayBirthday = selectedMonth === todayMonth && dayNumber === todayDate;
                           return (
                             <div key={emp.id} className="flex items-center gap-1">
                               <div className={`w-4 h-4 rounded-full bg-gradient-to-r ${getDepartmentGradient(emp.department)}`} />
@@ -496,7 +515,9 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
               })}
             </div>
           </motion.div>
-        ) : (
+        )}
+
+        {viewMode === 'yearly' && (
           <motion.div
             key="yearly"
             initial={{ opacity: 0, y: 20 }}
@@ -507,7 +528,7 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
               {currentYear} Birthday Calendar
             </h4>
             <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {birthdaysByMonth.map((monthBirthdays: any[], monthIndex: number) => (
+              {birthdaysByMonth.map((monthBirthdays: EmployeeWithBirthday[], monthIndex: number) => (
                 <motion.div
                   key={monthIndex}
                   variants={monthCardVariants}
@@ -522,8 +543,7 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
                     } cursor-pointer`}
                 >
                   <div className="text-center mb-2">
-                    <div className={`text-sm font-semibold ${monthIndex === todayMonth ? 'text-[#4A6A82]' : 'text-gray-700'
-                      }`}>
+                    <div className={`text-sm font-semibold ${monthIndex === todayMonth ? 'text-[#4A6A82]' : 'text-gray-700'}`}>
                       {getMonthName(monthIndex).substring(0, 3)}
                       {monthIndex === todayMonth && ' 📅'}
                     </div>
@@ -534,9 +554,8 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
 
                   {monthBirthdays.length > 0 ? (
                     <div className="space-y-2">
-                      {monthBirthdays.slice(0, 3).map((emp: any) => {
-                        const isTodayBirthday = monthIndex === todayMonth &&
-                          emp.birthDay === todayDate;
+                      {monthBirthdays.slice(0, 3).map((emp: EmployeeWithBirthday) => {
+                        const isTodayBirthday = monthIndex === todayMonth && emp.birthDay === todayDate;
                         return (
                           <div key={emp.id} className="flex items-center gap-2">
                             <div className={`w-2 h-2 rounded-full bg-gradient-to-r ${getDepartmentGradient(emp.department)}`} />
@@ -600,7 +619,7 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
             className="bg-white rounded-xl p-4 shadow-sm border border-gray-300 text-center"
           >
             <div className="text-2xl font-bold text-[#5A7A8F]">
-              {employees.filter((emp: Employee) => {
+              {employeesList.filter((emp) => {
                 const bdayInfo = getBirthdayMonthDate(emp.birthday);
                 return bdayInfo.month === todayMonth;
               }).length}
@@ -612,7 +631,7 @@ const UpcomingBirthdays = ({ employees }: UpcomingBirthdaysProps) => {
             className="bg-white rounded-xl p-4 shadow-sm border border-gray-300 text-center"
           >
             <div className="text-2xl font-bold text-green-600">
-              {employees.length}
+              {employeesList.length}
             </div>
             <div className="text-sm text-gray-600">Total Employees</div>
           </motion.div>
