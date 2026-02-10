@@ -9,7 +9,8 @@ import {
   DownloadCloud, X, Building,
   PhoneCall, PhoneMissed,
   User, Lock, ChevronLeft, ChevronRight,
-  Cake
+  Cake,
+  Coffee
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -23,8 +24,11 @@ import {
   useLeaveBalance,
   useUpdateLeaveBalance
 } from '../../hooks/useEmployees';
-import { useLeaves } from '../../hooks/useLeaves';
-
+import { useLeaves, useLeavesByEmployee } from '../../hooks/useLeaves';
+import { useEmployeeAttendance } from '../../hooks/useAttendance';
+import { useQuery } from '@tanstack/react-query';
+// import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { leaveApi } from '../../services/api';
 // Define types
 interface Employee {
   id: number;
@@ -638,6 +642,8 @@ interface EmployeeFullInfoTabProps {
 }
 
 const EmployeeFullInfoTab: React.FC<EmployeeFullInfoTabProps> = ({ employee }) => {
+  const { data: leaveBalanceData } = useLeaveBalance(employee.id);
+
   if (!employee) {
     return (
       <div className="text-center py-12">
@@ -649,102 +655,281 @@ const EmployeeFullInfoTab: React.FC<EmployeeFullInfoTabProps> = ({ employee }) =
     );
   }
 
+  const fixedBirthdayDisplay = (birthday: string) => {
+    if (!birthday) return 'Not provided';
+
+    // Method 1: Add T00:00:00 to force local time interpretation
+    const date = new Date(birthday + 'T00:00:00');
+
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const fixedJoinDateDisplay = (joinDate: string) => {
+    if (!joinDate) return 'Not provided';
+
+    const date = new Date(joinDate + 'T00:00:00');
+
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const fixedDatePickerInit = (dateString: string | null) => {
+    if (!dateString) return null;
+
+    // Parse date in local timezone
+    const [year, month, day] = dateString.split('T')[0].split('-');
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  };
+
+  const parseLocalDate = (dateString: string): Date | null => {
+    if (!dateString) return null;
+
+    // Extract date part only (ignore time if present)
+    const datePart = dateString.split('T')[0];
+    const [year, month, day] = datePart.split('-').map(Number);
+
+    // Create date in local timezone
+    return new Date(year, month - 1, day);
+  };
+
+  const formatDateForAPI = (date: Date | null): string | undefined => {
+    if (!date) return undefined;
+
+    // Get local date components
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+  };
+
+
+  // Filter to get only the leave type fields (numeric values)
+  const getLeaveBalanceFields = (data: any) => {
+    if (!data) return {};
+
+    const leaveTypes = ['casual', 'sick', 'earned', 'maternity', 'paternity', 'bereavement'];
+    const filtered: { [key: string]: number } = {};
+
+    leaveTypes.forEach(type => {
+      if (data[type] !== undefined && data[type] !== null) {
+        filtered[type] = data[type];
+      }
+    });
+
+    return filtered;
+  };
+
+  const leaveBalanceFields = getLeaveBalanceFields(leaveBalanceData);
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {/* Personal Information */}
-      <div className="space-y-4">
-        <h4 className="font-semibold text-gray-800 text-lg">Personal Information</h4>
-        <div className="space-y-3">
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Full Name</span>
-            <span className="font-medium">{employee.name || `${employee.firstName} ${employee.lastName}`}</span>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Personal Information */}
+        <div className="space-y-4">
+          <h4 className="font-semibold text-gray-800 text-lg">Personal Information</h4>
+          <div className="space-y-3">
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-600">Full Name</span>
+              <span className="font-medium">{employee.name || `${employee.firstName} ${employee.lastName}`}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-600">Personal Email</span>
+              <span className="font-medium">{employee.email || 'Not provided'}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-600">Phone Number</span>
+              <span className="font-medium">{employee.phone || 'Not provided'}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-600">Emergency Contact</span>
+              <span className="font-medium">{employee.emergencyContact || 'Not provided'}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-600">Location</span>
+              <span className="font-medium">{employee.location || 'Not provided'}</span>
+            </div>
           </div>
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Personal Email</span>
-            <span className="font-medium">{employee.email || 'Not provided'}</span>
-          </div>
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Phone Number</span>
-            <span className="font-medium">{employee.phone || 'Not provided'}</span>
-          </div>
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Emergency Contact</span>
-            <span className="font-medium">{employee.emergencyContact || 'Not provided'}</span>
-          </div>
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Location</span>
-            <span className="font-medium">{employee.location || 'Not provided'}</span>
+        </div>
+
+        {/* Employment Information */}
+        <div className="space-y-4">
+          <h4 className="font-semibold text-gray-800 text-lg">Employment Information</h4>
+          <div className="space-y-3">
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-600">Employee ID</span>
+              <span className="font-medium">{employee.employeeId || employee.empId || `EMP-${employee.id.toString().padStart(4, '0')}`}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-600">Department</span>
+              <span className="font-medium">{employee.department || 'Not provided'}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-600">Position</span>
+              <span className="font-medium">{employee.position || 'Not provided'}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-600">Organization Email</span>
+              <span className="font-medium">{employee.orgEmail || 'Not provided'}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-600 flex items-center gap-2">
+                <Cake className="w-4 h-4 text-purple-600" />
+                Date of Birth
+              </span>
+              <span className="font-medium">
+                {employee.birthday ? (() => {
+                  // Force local timezone interpretation
+                  const date = new Date(employee.birthday + 'T00:00:00');
+                  return date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  });
+                })() : 'Not provided'}
+              </span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-600">Organization Password</span>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">
+                  {employee.orgPassword ? '••••••••' : 'Not provided'}
+                </span>
+                {employee.orgPassword && <Lock className="w-4 h-4 text-gray-400" />}
+              </div>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <span className="text-gray-600">Join Date</span>
+              <span className="font-medium">
+                {employee.joinDate ? (() => {
+                  const date = new Date(employee.joinDate + 'T00:00:00');
+                  return date.toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  });
+                })() : 'Not provided'}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Employment Information */}
-      <div className="space-y-4">
-        <h4 className="font-semibold text-gray-800 text-lg">Employment Information</h4>
-        <div className="space-y-3">
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Employee ID</span>
-            <span className="font-medium">{employee.employeeId || employee.empId || `EMP-${employee.id.toString().padStart(4, '0')}`}</span>
-          </div>
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Department</span>
-            <span className="font-medium">{employee.department || 'Not provided'}</span>
-          </div>
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Position</span>
-            <span className="font-medium">{employee.position || 'Not provided'}</span>
-          </div>
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Organization Email</span>
-            <span className="font-medium">{employee.orgEmail || 'Not provided'}</span>
-          </div>
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600 flex items-center gap-2">
-              <Cake className="w-4 h-4 text-purple-600" />
-              Date of Birth
-            </span>
-            <span className="font-medium">
-              {employee.birthday ? new Date(employee.birthday).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              }) : 'Not provided'}
-            </span>
-          </div>
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Organization Password</span>
-            <div className="flex items-center gap-2">
-              <span className="font-medium">
-                {employee.orgPassword}
-              </span>
-              {employee.orgPassword && <Lock className="w-4 h-4 text-gray-400" />}
+      {/* Leave Balance Section */}
+      <div className="border-t border-gray-200 pt-6">
+        <h4 className="font-semibold text-gray-800 text-lg mb-4">Current Leave Balance</h4>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {Object.keys(leaveBalanceFields).length > 0 ? (
+            Object.entries(leaveBalanceFields).map(([type, days]) => (
+              <div key={type} className="bg-gray-50 rounded-xl p-4 text-center">
+                <div className="text-sm text-gray-600 capitalize">{type}</div>
+                <div className="text-2xl font-bold text-purple-600 mt-1">{days}</div>
+                <div className="text-xs text-gray-500">days left</div>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-full text-center text-gray-500">
+              {leaveBalanceData ? 'No leave balance data available' : 'Loading leave balance...'}
             </div>
-          </div>
-          <div className="flex justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-600">Join Date</span>
-            <span className="font-medium">
-              {employee.joinDate ? new Date(employee.joinDate).toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              }) : 'Not provided'}
-            </span>
-          </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
+// FIXED: EmployeeLeaveHistoryTab Component
+// Replace the existing EmployeeLeaveHistoryTab in EmployeesPage.tsx with this
 
-// Employee Leave History Tab Component
 interface EmployeeLeaveHistoryTabProps {
   employee: Employee;
-  leaveRequests?: LeaveRequest[];
 }
 
-const EmployeeLeaveHistoryTab: React.FC<EmployeeLeaveHistoryTabProps> = ({ employee, leaveRequests = [] }) => {
-  const employeeLeaves = leaveRequests.filter(leave => leave.empId === employee.id);
+const EmployeeLeaveHistoryTab: React.FC<EmployeeLeaveHistoryTabProps> = ({ employee }) => {
+  // Fetch leave balance
+  const { data: leaveBalanceData, isLoading: isLoadingBalance } = useLeaveBalance(employee.id);
+
+  // FIXED: Direct API call with proper error handling and data transformation
+  const { data: leaveRequestsResponse, isLoading: isLoadingLeaves, error, refetch } = useQuery({
+    queryKey: ['employee-leaves', employee.id],
+    queryFn: async () => {
+      try {
+        console.log('📥 Fetching leaves for employee ID:', employee.id);
+
+        // Call API with numeric ID
+        const response = await leaveApi.getByEmployee(employee.id);
+        console.log('✅ Raw API Response:', response);
+
+        // Handle different response formats
+        let leavesArray = [];
+
+        // Format 1: { success: true, count: 2, data: [...] }
+        if (response?.success && Array.isArray(response.data)) {
+          leavesArray = response.data;
+        }
+        // Format 2: { data: [...] }
+        else if (response?.data && Array.isArray(response.data)) {
+          leavesArray = response.data;
+        }
+        // Format 3: Direct array
+        else if (Array.isArray(response)) {
+          leavesArray = response;
+        }
+
+        console.log(`✅ Processed ${leavesArray.length} leave requests`);
+
+        // Transform data to ensure consistent format
+        return leavesArray.map((leave: any) => ({
+          id: leave.id,
+          empId: leave.empId,
+          type: leave.type,
+          from: leave.from,
+          to: leave.to,
+          days: leave.days,
+          reason: leave.reason,
+          status: leave.status,
+          appliedDate: leave.appliedDate || leave.createdAt,
+          isHalfDay: leave.isHalfDay || false,
+          isPaid: leave.isPaid || false,
+          paidDays: leave.paidDays || 0,
+          employee: leave.employee || {
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+            department: employee.department
+          }
+        }));
+      } catch (error) {
+        console.error('❌ Error fetching employee leaves:', error);
+        // Return empty array instead of throwing to prevent UI crash
+        return [];
+      }
+    },
+    enabled: !!employee.id && !isNaN(employee.id),
+    refetchOnWindowFocus: true,
+    staleTime: 10000, // 10 seconds
+    retry: 2,
+  });
+
+  // Process leaves data
+  const employeeLeaves = Array.isArray(leaveRequestsResponse) ? leaveRequestsResponse : [];
+
+  console.log('📊 Component State:', {
+    employeeId: employee.id,
+    totalLeaves: employeeLeaves.length,
+    isLoading: isLoadingLeaves,
+    hasError: !!error,
+    leaveData: employeeLeaves
+  });
+
+  // Sort leaves by applied date (newest first)
   const sortedLeaves = [...employeeLeaves].sort((a, b) =>
     new Date(b.appliedDate).getTime() - new Date(a.appliedDate).getTime()
   );
@@ -756,8 +941,36 @@ const EmployeeLeaveHistoryTab: React.FC<EmployeeLeaveHistoryTabProps> = ({ emplo
   const endIndex = startIndex + itemsPerPage;
   const currentLeaves = sortedLeaves.slice(startIndex, endIndex);
 
+  // Helper function to calculate actual days (fixes half-day issue)
+  const calculateActualDays = (leave: any) => {
+    if (leave.isHalfDay) {
+      return 0.5;
+    }
+    return leave.days || 1;
+  };
+
+  // Filter to get only the leave type fields (numeric values)
+  const getLeaveBalanceFields = (data: any) => {
+    if (!data) return {};
+
+    const leaveTypes = ['casual', 'sick', 'earned', 'maternity', 'paternity', 'bereavement'];
+    const filtered: { [key: string]: number } = {};
+
+    leaveTypes.forEach(type => {
+      if (data[type] !== undefined && data[type] !== null) {
+        filtered[type] = data[type];
+      }
+    });
+
+    return filtered;
+  };
+
+  const leaveBalanceFields = getLeaveBalanceFields(leaveBalanceData);
+
   const getLeaveTypeColor = (type: string) => {
     switch (type) {
+      case 'Paid': return 'bg-green-100 text-green-700 border-green-200';
+      case 'Unpaid': return 'bg-red-100 text-red-700 border-red-200';
       case 'Casual': return 'bg-blue-100 text-blue-700 border-blue-200';
       case 'Sick': return 'bg-orange-100 text-orange-700 border-orange-200';
       case 'Earned': return 'bg-purple-100 text-purple-700 border-purple-200';
@@ -768,73 +981,142 @@ const EmployeeLeaveHistoryTab: React.FC<EmployeeLeaveHistoryTabProps> = ({ emplo
     }
   };
 
+  const formatDays = (days: number) => {
+    if (days === 0.5) return '0.5';
+    if (days % 1 === 0) return days.toString();
+    return days.toFixed(1);
+  };
+
+  // Loading state
+  if (isLoadingLeaves || isLoadingBalance) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Loading leave history...</p>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md mx-auto">
+          <p className="text-red-600 font-medium mb-2">Error loading leave history</p>
+          <p className="text-sm text-gray-500 mb-4">
+            {error instanceof Error ? error.message : 'Please try again later'}
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Header with Refresh Button */}
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold text-gray-800">
+          Leave History ({employeeLeaves.length} total)
+        </h3>
+        <button
+          onClick={() => refetch()}
+          className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition cursor-pointer flex items-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Refresh
+        </button>
+      </div>
+
       {/* Current Balance */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {Object.entries(employee.leaveBalance || { casual: 0, sick: 0, earned: 0 }).map(([type, days]) => (
-          <div key={type} className="bg-gray-50 rounded-xl p-4 text-center">
-            <div className="text-sm text-gray-600 capitalize">{type}</div>
-            <div className="text-2xl font-bold text-purple-600 mt-1">{days}</div>
-            <div className="text-xs text-gray-500">days left</div>
+        {Object.keys(leaveBalanceFields).length > 0 ? (
+          Object.entries(leaveBalanceFields).map(([type, days]) => (
+            <div key={type} className="bg-gray-50 rounded-xl p-4 text-center">
+              <div className="text-sm text-gray-600 capitalize">{type}</div>
+              <div className="text-2xl font-bold text-purple-600 mt-1">{days}</div>
+              <div className="text-xs text-gray-500">days left</div>
+            </div>
+          ))
+        ) : (
+          <div className="col-span-full text-center text-gray-500 py-4">
+            {isLoadingBalance ? 'Loading balance...' : 'No leave balance data available'}
           </div>
-        ))}
+        )}
       </div>
 
       {/* Leave Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-6">
-          <div className="text-sm text-blue-600">Total Leaves Taken</div>
+          <div className="text-sm text-blue-600">Total Leaves</div>
           <div className="text-2xl font-bold text-blue-700">{employeeLeaves.length}</div>
           <div className="text-xs text-blue-500 mt-1">All time</div>
         </div>
         <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-6">
-          <div className="text-sm text-green-600">Approved Leaves</div>
+          <div className="text-sm text-green-600">Approved</div>
           <div className="text-2xl font-bold text-green-700">
             {employeeLeaves.filter(l => l.status === 'approved').length}
           </div>
-          <div className="text-xs text-green-500 mt-1">This year</div>
+          <div className="text-xs text-green-500 mt-1">Completed</div>
         </div>
         <div className="bg-gradient-to-r from-yellow-50 to-yellow-100 rounded-xl p-6">
-          <div className="text-sm text-yellow-600">Pending Requests</div>
+          <div className="text-sm text-yellow-600">Pending</div>
           <div className="text-2xl font-bold text-yellow-700">
             {employeeLeaves.filter(l => l.status === 'pending').length}
           </div>
-          <div className="text-xs text-yellow-500 mt-1">Awaiting approval</div>
+          <div className="text-xs text-yellow-500 mt-1">Awaiting</div>
+        </div>
+        <div className="bg-gradient-to-r from-red-50 to-red-100 rounded-xl p-6">
+          <div className="text-sm text-red-600">Rejected</div>
+          <div className="text-2xl font-bold text-red-700">
+            {employeeLeaves.filter(l => l.status === 'rejected').length}
+          </div>
+          <div className="text-xs text-red-500 mt-1">Declined</div>
         </div>
       </div>
 
       {/* Leave History Table */}
       <div>
         <div className="flex justify-between items-center mb-4">
-          <h4 className="font-semibold text-gray-800">Leave History</h4>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              className={`p-2 rounded-lg ${currentPage === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100 cursor-pointer'}`}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-sm text-gray-600">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              className={`p-2 rounded-lg ${currentPage === totalPages ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100 cursor-pointer'}`}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+          <h4 className="font-semibold text-gray-800">Detailed Leave Records</h4>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className={`p-2 rounded-lg ${currentPage === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100 cursor-pointer'}`}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm text-gray-600">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className={`p-2 rounded-lg ${currentPage === totalPages ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100 cursor-pointer'}`}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {sortedLeaves.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-gray-500">No leave history found</p>
+          <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+            <Calendar className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+            <p className="text-gray-500 font-medium text-lg">No leave history found</p>
+            <p className="text-sm text-gray-400 mt-2">This employee hasn't applied for any leaves yet</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto bg-white rounded-xl border border-gray-200">
             <table className="w-full">
               <thead className="bg-gray-100">
                 <tr>
@@ -847,81 +1129,134 @@ const EmployeeLeaveHistoryTab: React.FC<EmployeeLeaveHistoryTabProps> = ({ emplo
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {currentLeaves.map((leave) => (
-                  <tr key={leave.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${getLeaveTypeColor(leave.type)}`}>
-                        {leave.type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      {new Date(leave.from).toLocaleDateString()} - {new Date(leave.to).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 font-medium">{leave.days} days</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{leave.reason}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${leave.status === 'approved' ? 'bg-green-100 text-green-700' :
-                        leave.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
-                        {leave.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
-                      {new Date(leave.appliedDate).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
+                {currentLeaves.map((leave) => {
+                  const actualDays = calculateActualDays(leave);
+
+                  return (
+                    <tr key={leave.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className={`px-2 py-1 rounded text-xs font-medium inline-block w-fit ${getLeaveTypeColor(leave.type)}`}>
+                            {leave.type}
+                          </span>
+                          {leave.isHalfDay && (
+                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium inline-block w-fit">
+                              Half Day
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex flex-col">
+                          <span className="font-medium">
+                            {new Date(leave.from).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </span>
+                          {!leave.isHalfDay && leave.from !== leave.to && (
+                            <span className="text-xs text-gray-500">
+                              to {new Date(leave.to).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                              })}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-gray-800">
+                            {formatDays(actualDays)} {actualDays === 1 ? 'day' : 'days'}
+                          </span>
+                          {leave.isPaid && leave.paidDays > 0 && (
+                            <span className="text-xs text-green-600 font-medium">
+                              ✓ {formatDays(leave.paidDays)} paid
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        <div className="max-w-xs truncate" title={leave.reason}>
+                          {leave.reason}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${leave.status === 'approved' ? 'bg-green-100 text-green-700' :
+                          leave.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                          {leave.status.charAt(0).toUpperCase() + leave.status.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {new Date(leave.appliedDate).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {/* Summary Footer */}
+      {sortedLeaves.length > 0 && (
+        <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-4 border border-purple-100">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+            <div>
+              <p className="text-xs text-gray-600 mb-1">Total Requests</p>
+              <p className="text-2xl font-bold text-gray-800">{employeeLeaves.length}</p>
+            </div>
+            <div>
+              <p className="text-xs text-green-600 mb-1">Approved</p>
+              <p className="text-2xl font-bold text-green-700">
+                {employeeLeaves.filter(l => l.status === 'approved').length}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-yellow-600 mb-1">Pending</p>
+              <p className="text-2xl font-bold text-yellow-700">
+                {employeeLeaves.filter(l => l.status === 'pending').length}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-red-600 mb-1">Rejected</p>
+              <p className="text-2xl font-bold text-red-700">
+                {employeeLeaves.filter(l => l.status === 'rejected').length}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-// Employee Attendance Tab Component
-const EmployeeAttendanceTab: React.FC = () => {
-  // Mock attendance data
-  const generateAttendanceData = () => {
-    const data = [];
-    for (let month = 0; month < 5; month++) {
-      for (let day = 1; day <= 30; day++) {
-        const date = new Date(2024, month, day);
-        const dayOfWeek = date.getDay();
-        if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+interface EmployeeAttendanceTabProps {
+  employee: Employee;
+}
 
-        const statuses = ['present', 'present', 'present', 'present', 'late', 'leave'];
-        const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-
-        data.push({
-          date: date.toISOString().split('T')[0],
-          checkIn: randomStatus === 'leave' ? '-' : randomStatus === 'late' ? '10:00 AM' : '09:00 AM',
-          checkOut: randomStatus === 'leave' ? '-' : '06:00 PM',
-          status: randomStatus as 'present' | 'late' | 'leave',
-          hours: randomStatus === 'leave' ? '0' : randomStatus === 'late' ? '8.0' : '9.0'
-        });
-      }
-    }
-    return data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  };
-
-  const allAttendanceData = generateAttendanceData();
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 7;
+const EmployeeAttendanceTab: React.FC<EmployeeAttendanceTabProps> = ({ employee }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 7;
 
-  const totalPages = Math.ceil(allAttendanceData.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentAttendanceData = allAttendanceData.slice(startIndex, endIndex);
-
-  const currentMonthAttendance = allAttendanceData.filter(record => {
-    const date = new Date(record.date);
-    return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+  // Fetch real attendance data
+  const { data: monthlyAttendanceData } = useEmployeeAttendance(employee.id, {
+    month: currentMonth + 1,
+    year: currentYear
   });
+
+  const monthlyAttendance = Array.isArray(monthlyAttendanceData) ? monthlyAttendanceData : [];
 
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
@@ -949,17 +1284,73 @@ const EmployeeAttendanceTab: React.FC = () => {
     }
   };
 
+  // Calculate stats from real data - UPDATED WITH BREAK TIME
   const stats = {
-    present: currentMonthAttendance.filter(a => a.status === 'present').length,
-    late: currentMonthAttendance.filter(a => a.status === 'late').length,
-    leave: currentMonthAttendance.filter(a => a.status === 'leave').length,
-    totalHours: currentMonthAttendance.reduce((sum, a) => sum + parseFloat(a.hours), 0)
+    present: monthlyAttendance.filter(a => a.status === 'present').length,
+    late: monthlyAttendance.filter(a => a.status === 'late').length,
+    leave: monthlyAttendance.filter(a => a.status === 'on_leave').length,
+    totalHours: monthlyAttendance.reduce((sum, a) => sum + (a.totalHours || 0), 0),
+    totalBreakTime: monthlyAttendance.reduce((sum, a) => sum + (a.breaks || 0), 0) // NEW
+  };
+
+  const totalPages = Math.ceil(monthlyAttendance.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentAttendanceData = monthlyAttendance.slice(startIndex, endIndex);
+
+  const formatTimeForDisplay = (dateTime: string | null) => {
+    if (!dateTime) return '--:--';
+    try {
+      const date = new Date(dateTime);
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+    } catch {
+      return '--:--';
+    }
+  };
+
+  const formatHoursForDisplay = (hours: number | null) => {
+    if (!hours || hours === 0) return '--';
+    const totalMinutes = Math.round(hours * 60);
+    const displayHours = Math.floor(totalMinutes / 60);
+    const displayMinutes = totalMinutes % 60;
+    return `${displayHours}h ${displayMinutes}m`;
+  };
+
+  // NEW: Format break time in minutes to hours and minutes
+  const formatBreakTime = (minutes: number | null) => {
+    if (!minutes || minutes === 0) return '--';
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+
+    if (hours === 0) {
+      return `${mins}m`;
+    } else if (mins === 0) {
+      return `${hours}h`;
+    } else {
+      return `${hours}h ${mins}m`;
+    }
+  };
+
+  const getStatusColor = (status: string, isWeekend: boolean) => {
+    if (isWeekend) return 'bg-gray-100 text-gray-400';
+    switch (status) {
+      case 'present': return 'bg-green-100 text-green-700 hover:bg-green-200';
+      case 'late': return 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200';
+      case 'absent': return 'bg-red-100 text-red-700 hover:bg-red-200';
+      case 'half_day': return 'bg-orange-100 text-orange-700 hover:bg-orange-200';
+      case 'on_leave': return 'bg-purple-100 text-purple-700 hover:bg-purple-200';
+      default: return 'bg-gray-50 text-gray-400 hover:bg-gray-100';
+    }
   };
 
   return (
     <div className="space-y-6">
-      {/* Attendance Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Attendance Stats - UPDATED WITH BREAK TIME CARD */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-6">
           <div className="text-sm text-green-600">Days Present</div>
           <div className="text-2xl font-bold text-green-700">{stats.present}</div>
@@ -979,6 +1370,15 @@ const EmployeeAttendanceTab: React.FC = () => {
           <div className="text-sm text-purple-600">Total Hours</div>
           <div className="text-2xl font-bold text-purple-700">{stats.totalHours.toFixed(1)}</div>
           <div className="text-xs text-purple-500 mt-1">This month</div>
+        </div>
+        {/* NEW: Total Break Time Card */}
+        <div className="bg-gradient-to-r from-orange-50 to-orange-100 rounded-xl p-6">
+          <div className="text-sm text-orange-600 flex items-center gap-1">
+            <Coffee className="w-4 h-4" />
+            Break Time
+          </div>
+          <div className="text-2xl font-bold text-orange-700">{formatBreakTime(stats.totalBreakTime)}</div>
+          <div className="text-xs text-orange-500 mt-1">This month</div>
         </div>
       </div>
 
@@ -1020,19 +1420,32 @@ const EmployeeAttendanceTab: React.FC = () => {
             const day = i + 1;
             const date = new Date(currentYear, currentMonth, day);
             const dateStr = date.toISOString().split('T')[0];
-            const attendance = currentMonthAttendance.find(a => a.date === dateStr);
-            const status = attendance?.status || 'future';
+            const attendance = monthlyAttendance.find(a =>
+              new Date(a.date).toISOString().split('T')[0] === dateStr
+            );
             const isToday = date.toDateString() === new Date().toDateString();
+            const dayOfWeek = date.getDay();
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            const status = attendance?.status || 'none';
 
             return (
-              <div key={day} className={`h-10 rounded-lg flex items-center justify-center relative ${status === 'present' ? 'bg-green-100 text-green-700' :
-                status === 'late' ? 'bg-yellow-100 text-yellow-700' :
-                  status === 'leave' ? 'bg-blue-100 text-blue-700' :
-                    'bg-gray-100 text-gray-400'
-                } ${isToday ? 'ring-2 ring-purple-500 ring-offset-1' : ''}`}>
+              <div
+                key={day}
+                className={`h-10 rounded-lg flex items-center justify-center relative ${getStatusColor(status, isWeekend)
+                  } ${isToday ? 'ring-2 ring-purple-500 ring-offset-1' : ''}`}
+                title={attendance ?
+                  `${dateStr}: ${attendance.status}\nCheck In: ${formatTimeForDisplay(attendance.checkIn)}\nCheck Out: ${formatTimeForDisplay(attendance.checkOut)}\nHours: ${formatHoursForDisplay(attendance.totalHours)}\nBreak Time: ${formatBreakTime(attendance.breaks)}` :
+                  `${dateStr}: No attendance record`
+                }
+              >
                 {day}
-                {attendance && (
+                {attendance && attendance.checkIn && (
                   <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-current opacity-60" />
+                )}
+                {/* NEW: Break indicator */}
+                {attendance && attendance.breaks > 0 && (
+                  <div className="absolute -bottom-1 -left-1 w-1.5 h-1.5 rounded-full bg-orange-500 opacity-80"
+                    title={`Break: ${formatBreakTime(attendance.breaks)}`} />
                 )}
               </div>
             );
@@ -1056,81 +1469,116 @@ const EmployeeAttendanceTab: React.FC = () => {
             <div className="w-3 h-3 bg-gray-100 rounded"></div>
             No Data
           </div>
+          {/* NEW: Break indicator legend */}
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+            Has Breaks
+          </div>
         </div>
       </div>
 
-      {/* Attendance History Table */}
+      {/* Attendance History Table - UPDATED WITH BREAK TIME COLUMN */}
       <div>
         <div className="flex justify-between items-center mb-4">
           <h4 className="font-semibold text-gray-800">Daily Attendance Log</h4>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              className={`p-2 rounded-lg ${currentPage === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100 cursor-pointer'}`}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-sm text-gray-600">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              className={`p-2 rounded-lg ${currentPage === totalPages ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100 cursor-pointer'}`}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className={`p-2 rounded-lg ${currentPage === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100 cursor-pointer'}`}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm text-gray-600">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className={`p-2 rounded-lg ${currentPage === totalPages ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100 cursor-pointer'}`}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Date</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Check In</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Check Out</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Working Hours</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Remarks</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {currentAttendanceData.map((attendance, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    {new Date(attendance.date).toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric'
-                    })}
-                  </td>
-                  <td className="px-4 py-3 font-medium">{attendance.checkIn}</td>
-                  <td className="px-4 py-3 font-medium">{attendance.checkOut}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${attendance.status === 'present' ? 'bg-green-100 text-green-700' :
-                      attendance.status === 'late' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-blue-100 text-blue-700'
-                      }`}>
-                      {attendance.status.charAt(0).toUpperCase() + attendance.status.slice(1)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 font-medium">{attendance.hours} hrs</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {attendance.status === 'late' ? 'Late arrival' :
-                      attendance.status === 'leave' ? 'On leave' : 'Regular day'}
-                  </td>
+        {monthlyAttendance.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No attendance records found for this month</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Date</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Check In</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Check Out</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Working Hours</th>
+                  {/* NEW: Break Time Column */}
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">
+                    <div className="flex items-center gap-1">
+                      <Coffee className="w-4 h-4 text-orange-600" />
+                      Break Time
+                    </div>
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Remarks</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {currentAttendanceData.map((attendance) => (
+                  <tr key={attendance.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      {new Date(attendance.date).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </td>
+                    <td className="px-4 py-3 font-medium">{formatTimeForDisplay(attendance.checkIn)}</td>
+                    <td className="px-4 py-3 font-medium">{formatTimeForDisplay(attendance.checkOut)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${attendance.status === 'present' ? 'bg-green-100 text-green-700' :
+                        attendance.status === 'late' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-blue-100 text-blue-700'
+                        }`}>
+                        {attendance.status.charAt(0).toUpperCase() + attendance.status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-medium">{formatHoursForDisplay(attendance.totalHours)}</td>
+                    {/* NEW: Break Time Display */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        {attendance.breaks > 0 ? (
+                          <>
+                            <span className="font-medium text-orange-600">{formatBreakTime(attendance.breaks)}</span>
+                            <Coffee className="w-3 h-3 text-orange-400" />
+                          </>
+                        ) : (
+                          <span className="text-gray-400">--</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {attendance.notes || (
+                        attendance.status === 'late' ? 'Late arrival' :
+                          attendance.status === 'on_leave' ? 'On leave' :
+                            'Regular day'
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 };
-
 // Main EmployeesPage Component
 const EmployeesPage = () => {
   // React Query hooks
@@ -1292,28 +1740,65 @@ const EmployeesPage = () => {
     setShowEmployeeDetailsModal(true);
   };
 
+const parseLocalDate = (dateString: string | null | undefined): Date | null => {
+  if (!dateString) return null;
+  
+  try {
+    // Handle both ISO format (2024-12-31T00:00:00) and simple date format (2024-12-31)
+    const datePart = dateString.split('T')[0];
+    const [year, month, day] = datePart.split('-').map(Number);
+    
+    // Validate the parsed values
+    if (isNaN(year) || isNaN(month) || isNaN(day) || 
+        month < 1 || month > 12 || day < 1 || day > 31) {
+      return null;
+    }
+    
+    return new Date(year, month - 1, day);
+  } catch (error) {
+    console.error('Error parsing date:', dateString, error);
+    return null;
+  }
+};
+
 const handleEditEmployee = (employee: Employee) => {
+  // Safely generate employeeId with fallback
+  const generateEmployeeId = (): string => {
+    if (employee.employeeId) {
+      return employee.employeeId;
+    }
+    
+    // Fallback to using id if available
+    if (employee.id) {
+      return `EMP-${employee.id.toString().padStart(4, '0')}`;
+    }
+    
+    // If no id or employeeId, generate a temporary one or use empty string
+    return 'EMP-0000';
+  };
+
   setNewEmployee({
     firstName: employee.firstName || '',
     lastName: employee.lastName || '',
-    employeeId: employee.employeeId || `EMP-${employee.id.toString().padStart(4, '0')}`,
+    employeeId: generateEmployeeId(), // Use the helper function
     email: employee.email || '',
     orgEmail: employee.orgEmail || '',
-    orgPassword: '', // Leave empty or show placeholder
+    orgPassword: '', // Leave empty for security
     phone: employee.phone || '',
     department: employee.department || '',
     position: employee.position || '',
-    joinDate: employee.joinDate ? new Date(employee.joinDate) : new Date(),
-    leaveDate: employee.leaveDate ? new Date(employee.leaveDate) : null,
-    birthday: employee.birthday ? new Date(employee.birthday) : null,
+    joinDate: parseLocalDate(employee.joinDate),
+    leaveDate: parseLocalDate(employee.leaveDate),
+    birthday: parseLocalDate(employee.birthday),
     location: employee.location || '',
     emergencyContact: employee.emergencyContact || ''
   });
-    setSelectedEmployee(employee);
-    setIsEditing(true);
-    setActiveEditTab('info');
-    setShowEmployeeModal(true);
-  };
+  
+  setSelectedEmployee(employee);
+  setIsEditing(true);
+  setActiveEditTab('info');
+  setShowEmployeeModal(true);
+};
 
   // Safe avatar getter
   // Update the getEmployeeAvatar function:
@@ -1571,9 +2056,9 @@ const handleEditEmployee = (employee: Employee) => {
             <span className="text-gray-600">{employee.department || 'N/A'}</span>
           </div>
           <div className="flex items-center gap-1">
-  <Lock className="w-4 h-4 text-gray-400" />
-  <span className="text-gray-600">{employee.orgEmail || 'No org email'}</span>
-</div>
+            <Lock className="w-4 h-4 text-gray-400" />
+            <span className="text-gray-600">{employee.orgEmail || 'No org email'}</span>
+          </div>
           <div className="flex items-center gap-2 text-sm">
             <Calendar className="w-4 h-4 text-gray-400" />
             <span className="text-gray-600">
@@ -2343,14 +2828,11 @@ const handleEditEmployee = (employee: Employee) => {
                 )}
 
                 {viewModalTab === 'leave' && (
-                  <EmployeeLeaveHistoryTab
-                    employee={selectedEmployee}
-                    leaveRequests={leaveRequests}
-                  />
+                  <EmployeeLeaveHistoryTab employee={selectedEmployee} />
                 )}
 
                 {viewModalTab === 'attendance' && (
-                  <EmployeeAttendanceTab />
+                  <EmployeeAttendanceTab employee={selectedEmployee} />
                 )}
               </div>
             </motion.div>

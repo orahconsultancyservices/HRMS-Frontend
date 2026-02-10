@@ -165,16 +165,14 @@ function AppContent() {
           />;
         case 'employees':
           return <EmployeesPage />;
-        // In App.tsx, change the LeavesPage rendering to:
+
         case 'leaves':
           return <LeavesPage
             leaveTypes={leaveTypes}
             setLeaveTypes={setLeaveTypes}
           />;
         case 'attendance':
-          return <AttendancePage
-            attendance={attendanceForAttendancePage}
-          />;
+          return <AttendancePage />;
         case 'birthdays':
           return <BirthdaysPage />;
         case 'tasks':

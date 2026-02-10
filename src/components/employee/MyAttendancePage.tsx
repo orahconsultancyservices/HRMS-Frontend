@@ -1,10 +1,10 @@
+// src/components/employee/MyAttendancePage.tsx - MODIFIED VERSION
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Clock, Calendar, Download, TrendingUp, BarChart3, 
-  CheckCircle, XCircle, CalendarDays, Search, DownloadCloud, 
-  FileText, PieChart, LogIn, LogOut, ChevronLeft, ChevronRight, Coffee,
-  Filter, List
+  Clock, Calendar, DownloadCloud, TrendingUp, 
+  CheckCircle, XCircle, CalendarDays, Search,
+  ChevronLeft, ChevronRight, Coffee, AlertCircle
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -37,7 +37,6 @@ interface AttendanceRecord {
 type DateRange = [Date | null, Date | null];
 
 const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
-  // Convert empId to number safely
   const getEmployeeIdNumber = () => {
     try {
       if (employee.id) {
@@ -66,7 +65,9 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
   const [dateRange, setDateRange] = useState<DateRange>([null, null]);
   const [startDate, endDate] = dateRange;
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  
+  // Changed default view mode to 'monthly'
+  const [viewMode, setViewMode] = useState<'weekly' | 'monthly'>('monthly');
   
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedWeek, setSelectedWeek] = useState(0);
@@ -74,22 +75,19 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
-  // State for data
   const [todayStatus, setTodayStatus] = useState<any>(null);
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>([]);
   const [breaks, setBreaks] = useState<any[]>([]);
-  const [monthlyAttendance, setMonthlyAttendance] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
-  // Today's status
   const canPunchIn = !todayStatus?.checkIn;
   const canPunchOut = todayStatus?.checkIn && !todayStatus?.checkOut;
   const workCompleted = todayStatus?.checkIn && todayStatus?.checkOut;
   const activeBreak = breaks.find((b: any) => b.status === 'active');
   const isOnBreak = !!activeBreak;
 
-  // Format time for display
   const formatTimeForDisplay = (dateTime: string | Date | null | undefined) => {
     if (!dateTime) return '--:--';
     try {
@@ -105,7 +103,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     }
   };
 
-  // Format date for display
   const formatDateForDisplay = (dateStr: string) => {
     try {
       const date = new Date(dateStr);
@@ -121,7 +118,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     }
   };
 
-  // Get day name from date
   const getDayName = (dateStr: string) => {
     try {
       const date = new Date(dateStr);
@@ -131,7 +127,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     }
   };
 
-  // Format hours for display
   const formatHoursForDisplay = (hours: number | null | undefined) => {
     if (!hours || hours === 0) return '--';
     const totalMinutes = Math.round(hours * 60);
@@ -140,7 +135,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     return `${displayHours}h ${displayMinutes}m`;
   };
 
-  // Fetch today's attendance
   const fetchTodayAttendance = async () => {
     try {
       const response = await attendanceApi.getTodayStatus(employeeIdNumber);
@@ -157,7 +151,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     }
   };
 
-  // Fetch attendance history
   const fetchAttendanceHistory = async () => {
     setIsLoadingHistory(true);
     try {
@@ -175,7 +168,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
       
       let dataArray = [];
       
-      // Handle different response structures
       if (response.success) {
         if (response.data && response.data.data && Array.isArray(response.data.data)) {
           dataArray = response.data.data;
@@ -188,7 +180,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
         }
       }
       
-      // Format the data
       const formattedHistory = dataArray.map((record: any) => ({
         id: record.id || 0,
         date: record.date || '',
@@ -214,35 +205,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     }
   };
 
-  // Fetch monthly attendance
-  const fetchMonthlyAttendance = async () => {
-    try {
-      const response = await attendanceApi.getByEmployee(employeeIdNumber, {
-        month: currentMonth + 1,
-        year: currentYear
-      });
-      
-      if (response.success) {
-        let dataArray = [];
-        
-        if (response.data && response.data.data && Array.isArray(response.data.data)) {
-          dataArray = response.data.data;
-        } 
-        else if (response.data && Array.isArray(response.data)) {
-          dataArray = response.data;
-        }
-        
-        setMonthlyAttendance(dataArray);
-      } else {
-        setMonthlyAttendance([]);
-      }
-    } catch (error) {
-      console.error('Error fetching monthly attendance:', error);
-      setMonthlyAttendance([]);
-    }
-  };
-
-  // Fetch breaks
   const fetchBreaks = async () => {
     try {
       const response = await attendanceApi.getBreaks(employeeIdNumber);
@@ -256,25 +218,17 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     }
   };
 
-  // Initial data fetch
   useEffect(() => {
     fetchTodayAttendance();
     fetchAttendanceHistory();
-    fetchMonthlyAttendance();
     fetchBreaks();
   }, [employeeIdNumber]);
 
-  // Fetch history when date range changes
   useEffect(() => {
     if (startDate || endDate) {
       fetchAttendanceHistory();
     }
   }, [startDate, endDate]);
-
-  // Fetch monthly data when month/year changes
-  useEffect(() => {
-    fetchMonthlyAttendance();
-  }, [currentMonth, currentYear]);
 
   const showNotificationMessage = (message: string, type: 'success' | 'error' | 'info') => {
     setNotification({ message, type });
@@ -294,7 +248,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
         showNotificationMessage('Successfully clocked in! Have a productive day!', 'success');
         fetchTodayAttendance();
         fetchAttendanceHistory();
-        fetchMonthlyAttendance();
       } else {
         throw new Error(response.message || 'Failed to clock in');
       }
@@ -321,7 +274,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
         showNotificationMessage('Successfully clocked out! See you tomorrow!', 'success');
         fetchTodayAttendance();
         fetchAttendanceHistory();
-        fetchMonthlyAttendance();
       } else {
         throw new Error(response.message || 'Failed to clock out');
       }
@@ -380,34 +332,50 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     }
   };
 
-  const handleTakeBreak = () => {
-    if (isOnBreak) {
-      handleEndBreak();
-    } else {
-      handleStartBreak();
+  const handleExportAttendance = async () => {
+    setIsExporting(true);
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      
+      // Only monthly export is allowed
+      const targetMonth = currentMonth + selectedMonth + 1;
+      const targetYear = currentYear;
+      const url = `${API_URL}/attendance/employee/${employeeIdNumber}/export/monthly?month=${targetMonth}&year=${targetYear}`;
+      const filename = `monthly-attendance-${targetYear}-${String(targetMonth).padStart(2, '0')}.xlsx`;
+
+      console.log('📥 Exporting monthly attendance:', { url, filename });
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to export attendance');
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+
+      showNotificationMessage('Monthly attendance exported successfully!', 'success');
+    } catch (error: any) {
+      console.error('❌ Error exporting attendance:', error);
+      showNotificationMessage(error.message || 'Failed to export attendance', 'error');
+    } finally {
+      setIsExporting(false);
     }
   };
 
-  // Format break duration
-  const formatBreakDuration = (minutes: number) => {
-    if (!minutes || minutes === 0) return '0m';
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-
-    if (hours === 0) {
-      return `${mins}m`;
-    } else if (mins === 0) {
-      return `${hours}h`;
-    } else {
-      return `${hours}h ${mins}m`;
-    }
-  };
-
-  const downloadAttendance = () => {
-    showNotificationMessage('Downloading attendance report...', 'info');
-  };
-
-  // Get status badge color
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
       case 'present': return 'bg-green-100 text-green-700';
@@ -419,16 +387,10 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     }
   };
 
-  // Filter attendance based on view mode
   const getFilteredDataByViewMode = () => {
     const today = new Date(currentDate);
     
     switch (viewMode) {
-      case 'daily':
-        return attendanceHistory.filter((record: any) => 
-          new Date(record.date).toDateString() === today.toDateString()
-        );
-        
       case 'weekly':
         const weekStart = new Date(today);
         weekStart.setDate(today.getDate() - today.getDay() + selectedWeek * 7);
@@ -461,7 +423,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     return matchesSearch;
   });
 
-  // Calculate statistics
   const totalPresent = filteredAttendance.filter((a: any) => a.status === 'present').length;
   const totalAbsent = filteredAttendance.filter((a: any) => a.status === 'absent').length;
   const totalLate = filteredAttendance.filter((a: any) => a.status === 'late').length;
@@ -476,19 +437,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
   const totalWorkHours = filteredAttendance
     .filter((a: any) => a.status === 'present' || a.status === 'late' || a.status === 'half_day')
     .reduce((acc: number, curr: any) => acc + (curr.totalHours || 0), 0);
-
-  // Date navigation
-  const navigateToPreviousDay = () => {
-    const newDate = new Date(currentDate);
-    newDate.setDate(newDate.getDate() - 1);
-    setCurrentDate(newDate);
-  };
-
-  const navigateToNextDay = () => {
-    const newDate = new Date(currentDate);
-    newDate.setDate(newDate.getDate() + 1);
-    setCurrentDate(newDate);
-  };
 
   const navigateToPreviousWeek = () => setSelectedWeek(prev => prev - 1);
   const navigateToNextWeek = () => setSelectedWeek(prev => prev + 1);
@@ -507,14 +455,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     const today = new Date(currentDate);
     
     switch (viewMode) {
-      case 'daily':
-        return today.toLocaleDateString('en-US', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
-        
       case 'weekly':
         const weekStart = new Date(today);
         weekStart.setDate(today.getDate() - today.getDay() + selectedWeek * 7);
@@ -533,21 +473,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     }
   };
 
-  const getStatusText = () => {
-    if (workCompleted) return 'Work completed for today! 🎉';
-    if (isOnBreak) return 'On Break - Enjoy your coffee! ☕';
-    if (canPunchOut) return 'Active - Currently working 💼';
-    if (canPunchIn) return 'Ready to start your day ⏰';
-    return 'Status unavailable';
-  };
-
-  // Get month name
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  // Animation variants
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -561,23 +486,9 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     visible: { y: 0, opacity: 1 }
   };
 
-  const pulseVariants = {
-    pulse: {
-      scale: [1, 1.05, 1],
-      transition: {
-        duration: 2,
-        repeat: Infinity,
-        ease: "easeInOut" as const
-      }
-    }
-  };
-
-  // Calculate total break time
   const totalBreakTime = breaks
     .filter(brk => brk.status === 'completed')
     .reduce((sum, brk) => sum + (brk.duration || 0), 0);
-
-
 
   return (
     <motion.div 
@@ -627,8 +538,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
           <span className="font-medium">{getDateRangeDisplay()}</span>
         </div>
       </motion.div>
-
-
 
       {/* Statistics Cards */}
       <motion.div 
@@ -725,15 +634,21 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
               />
             </div>
 
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={downloadAttendance}
-              className="px-4 py-2 bg-gradient-to-r from-[#F5A42C] to-[#F5A42C] text-white rounded-xl hover:shadow-lg transition cursor-pointer flex items-center gap-2"
-            >
-              <DownloadCloud className="w-4 h-4" />
-              Export {viewMode.charAt(0).toUpperCase() + viewMode.slice(1)}
-            </motion.button>
+            {/* Show export button only for monthly view */}
+            {viewMode === 'monthly' && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleExportAttendance}
+                disabled={isExporting}
+                className={`px-4 py-2 bg-gradient-to-r from-[#F5A42C] to-[#F5A42C] text-white rounded-xl hover:shadow-lg transition cursor-pointer flex items-center gap-2 ${
+                  isExporting ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                <DownloadCloud className="w-4 h-4" />
+                {isExporting ? 'Exporting...' : 'Export Monthly'}
+              </motion.button>
+            )}
           </div>
         </div>
       </motion.div>
@@ -746,17 +661,7 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex border border-gray-300 rounded-xl overflow-hidden">
-              <button 
-                onClick={() => setViewMode('daily')}
-                className={`px-4 py-2 flex items-center gap-2 cursor-pointer ${
-                  viewMode === 'daily' 
-                    ? 'bg-[#6B8DA2] text-white' 
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-                Daily
-              </button>
+              {/* Removed Daily tab */}
               <button 
                 onClick={() => setViewMode('weekly')}
                 className={`px-4 py-2 flex items-center gap-2 cursor-pointer ${
@@ -783,36 +688,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Navigation buttons based on view mode */}
-            {viewMode === 'daily' && (
-              <>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={navigateToPreviousDay}
-                  className="p-2 hover:bg-gray-100 rounded-lg cursor-pointer"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={resetToCurrent}
-                  className="px-4 py-2 bg-gradient-to-r from-[#6B8DA2]/10 to-[#F5A42C]/10 text-[#6B8DA2] rounded-lg hover:shadow-sm cursor-pointer"
-                >
-                  Today
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={navigateToNextDay}
-                  className="p-2 hover:bg-gray-100 rounded-lg cursor-pointer"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </motion.button>
-              </>
-            )}
-            
             {viewMode === 'weekly' && (
               <>
                 <motion.button
@@ -968,13 +843,19 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
                 ) : (
                   <tr>
                     <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                      No attendance records found for the selected {viewMode} view.
-                      <button
-                        onClick={fetchAttendanceHistory}
-                        className="mt-2 block mx-auto px-4 py-2 bg-[#6B8DA2] text-white rounded-lg hover:bg-[#5A7A8F] transition"
-                      >
-                        Refresh Data
-                      </button>
+                      <div className="flex flex-col items-center gap-3">
+                        <AlertCircle className="w-12 h-12 text-gray-300" />
+                        <div>
+                          <p className="font-medium">No attendance records found</p>
+                          <p className="text-sm text-gray-400 mt-1">for the selected {viewMode} view.</p>
+                        </div>
+                        <button
+                          onClick={fetchAttendanceHistory}
+                          className="mt-2 px-4 py-2 bg-[#6B8DA2] text-white rounded-lg hover:bg-[#5A7A8F] transition"
+                        >
+                          Refresh Data
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -983,8 +864,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
           </table>
         </div>
       </motion.div>
-
-      
     </motion.div>
   );
 };

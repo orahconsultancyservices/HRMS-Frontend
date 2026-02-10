@@ -5,11 +5,9 @@ import {
   Check, X, Calendar, FileText, Filter, Search,
   Clock, Eye, ChevronDown, ChevronUp,
   Mail, Phone, Briefcase,
-  DownloadCloud, User, Clock as ClockIcon,
+  User, Clock as ClockIcon,
   CheckCircle, XCircle, CalendarDays, MessageSquare,
-  FileCheck, Edit, Trash2, Tag, Settings,
-  Users, AlertCircle, CheckSquare, XSquare,
-  MoreVertical
+  FileCheck
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -102,140 +100,124 @@ const LeavesPage = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [showBulkActions, setShowBulkActions] = useState(false);
-  const [selectedLeaves, setSelectedLeaves] = useState<Set<number>>(new Set());
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [exportFormat, setExportFormat] = useState<'csv' | 'pdf' | 'excel'>('csv');
-  const [managerNotes, setManagerNotes] = useState<{ [key: number]: string }>({});
-  const [showLeaveTypesModal, setShowLeaveTypesModal] = useState(false);
-  const [editingLeaveType, setEditingLeaveType] = useState<LeaveType | null>(null);
-  const [newLeaveType, setNewLeaveType] = useState<Partial<LeaveType>>({
-    name: '',
-    code: '',
-    description: '',
-    color: '#3B82F6',
-  });
 
   const [startDate, endDate] = filters.dateRange;
 
   // Process data from API
-  // Replace lines around where you define leaveRequests:
-const leaveRequests = React.useMemo(() => {
-  if (!leavesData) return [];
-  
-  console.log('📊 Processing leavesData:', leavesData);
-  
-  // If leavesData is already an array, use it directly
-  if (Array.isArray(leavesData)) {
-    return leavesData;
-  }
-  
-  // If leavesData has a data property that's an array
-  if (leavesData && leavesData.data && Array.isArray(leavesData.data)) {
-    return leavesData.data.map((leave: any) => ({
-      id: leave.id,
-      empId: leave.empId,
-      employeeId: leave.employee?.id || leave.empId,
-      type: leave.type,
-      from: leave.from,
-      to: leave.to,
-      days: leave.days,
-      reason: leave.reason,
-      status: leave.status,
-      appliedDate: leave.appliedDate,
-      contactDuringLeave: leave.contactDuringLeave,
-      addressDuringLeave: leave.addressDuringLeave,
-      managerNotes: leave.managerNotes,
-      isHalfDay: leave.isHalfDay || false,
-      isPaid: leave.isPaid || false,
-      paidDays: leave.paidDays || 0,
-      department: leave.employee?.department,
-      empName: leave.employee ? 
-        `${leave.employee.firstName} ${leave.employee.lastName}` : 
-        `Employee ${leave.empId}`
-    }));
-  }
-  
-  console.warn('⚠️ Unexpected leaves data format:', leavesData);
-  return [];
-}, [leavesData]);
+  const leaveRequests = React.useMemo(() => {
+    if (!leavesData) return [];
+    
+    console.log('📊 Processing leavesData:', leavesData);
+    
+    // If leavesData is already an array, use it directly
+    if (Array.isArray(leavesData)) {
+      return leavesData;
+    }
+    
+    // If leavesData has a data property that's an array
+    if (leavesData && leavesData.data && Array.isArray(leavesData.data)) {
+      return leavesData.data.map((leave: any) => ({
+        id: leave.id,
+        empId: leave.empId,
+        employeeId: leave.employee?.id || leave.empId,
+        type: leave.type,
+        from: leave.from,
+        to: leave.to,
+        days: leave.days,
+        reason: leave.reason,
+        status: leave.status,
+        appliedDate: leave.appliedDate,
+        contactDuringLeave: leave.contactDuringLeave,
+        addressDuringLeave: leave.addressDuringLeave,
+        managerNotes: leave.managerNotes,
+        isHalfDay: leave.isHalfDay || false,
+        isPaid: leave.isPaid || false,
+        paidDays: leave.paidDays || 0,
+        department: leave.employee?.department,
+        empName: leave.employee ? 
+          `${leave.employee.firstName} ${leave.employee.lastName}` : 
+          `Employee ${leave.empId}`
+      }));
+    }
+    
+    console.warn('⚠️ Unexpected leaves data format:', leavesData);
+    return [];
+  }, [leavesData]);
 
-const employees = React.useMemo(() => {
-  if (!employeesData) return [];
-  
-  console.log('👥 Processing employeesData:', employeesData);
-  
-  if (Array.isArray(employeesData)) {
-    return employeesData;
-  }
-  
-  if (employeesData && typeof employeesData === 'object') {
-    if (Array.isArray(employeesData.data)) {
-      return employeesData.data;
+  const employees = React.useMemo(() => {
+    if (!employeesData) return [];
+    
+    console.log('👥 Processing employeesData:', employeesData);
+    
+    if (Array.isArray(employeesData)) {
+      return employeesData;
     }
-    if (employeesData.success && Array.isArray(employeesData.data)) {
-      return employeesData.data;
+    
+    if (employeesData && typeof employeesData === 'object') {
+      if (Array.isArray(employeesData.data)) {
+        return employeesData.data;
+      }
+      if (employeesData.success && Array.isArray(employeesData.data)) {
+        return employeesData.data;
+      }
     }
-  }
-  
-  console.error('❌ Invalid employees data format:', employeesData);
-  return [];
-}, [employeesData]);
+    
+    console.error('❌ Invalid employees data format:', employeesData);
+    return [];
+  }, [employeesData]);
+
   // Get active leave types
   const activeLeaveTypes = leaveTypes.filter(lt => lt.isActive);
 
-  // Inside your component, add this:
-// Add this useEffect in LeavePage.tsx:
-useEffect(() => {
-  console.log('📊 Leaves Page Data Debug:', {
-    leavesData,
-    employeesData,
-    leaveRequestsCount: leaveRequests.length,
-    employeesCount: employees.length
-  });
-  
-  // Log first few items to verify structure
-  if (leaveRequests.length > 0) {
-    console.log('📋 First leave request:', leaveRequests[0]);
-    console.log('🔑 Keys:', Object.keys(leaveRequests[0]));
-  }
-  
-  if (employees.length > 0) {
-    console.log('👤 First employee:', employees[0]);
-  }
-}, [leavesData, employeesData, leaveRequests, employees]);
+  useEffect(() => {
+    console.log('📊 Leaves Page Data Debug:', {
+      leavesData,
+      employeesData,
+      leaveRequestsCount: leaveRequests.length,
+      employeesCount: employees.length
+    });
+    
+    // Log first few items to verify structure
+    if (leaveRequests.length > 0) {
+      console.log('📋 First leave request:', leaveRequests[0]);
+      console.log('🔑 Keys:', Object.keys(leaveRequests[0]));
+    }
+    
+    if (employees.length > 0) {
+      console.log('👤 First employee:', employees[0]);
+    }
+  }, [leavesData, employeesData, leaveRequests, employees]);
 
   // Filter leave requests
-// Update the filteredLeaves calculation:
-const filteredLeaves = leaveRequests.filter(leave => {
-  const matchesStatus = filters.status === 'all' || leave.status === filters.status;
-  const matchesType = filters.type === 'all' || leave.type === filters.type;
-  
-  // Get employee details - try multiple approaches
-  let employee;
-  if (leave.employeeId) {
-    employee = employees.find(e => e.id === leave.employeeId);
-  } else if (leave.empId) {
-    employee = employees.find(e => e.id === leave.empId);
-  }
-  
-  // Use leave.department if available, otherwise employee department
-  const department = leave.department || employee?.department;
-  const matchesDepartment = filters.department === 'all' || department === filters.department;
+  const filteredLeaves = leaveRequests.filter(leave => {
+    const matchesStatus = filters.status === 'all' || leave.status === filters.status;
+    const matchesType = filters.type === 'all' || leave.type === filters.type;
+    
+    // Get employee details - try multiple approaches
+    let employee;
+    if (leave.employeeId) {
+      employee = employees.find(e => e.id === leave.employeeId);
+    } else if (leave.empId) {
+      employee = employees.find(e => e.id === leave.empId);
+    }
+    
+    // Use leave.department if available, otherwise employee department
+    const department = leave.department || employee?.department;
+    const matchesDepartment = filters.department === 'all' || department === filters.department;
 
-  const matchesSearch = searchTerm === '' ||
-    (employee?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-     employee?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     leave.reason?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     leave.type?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = searchTerm === '' ||
+      (employee?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+       employee?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+       leave.reason?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+       leave.type?.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  const leaveFrom = new Date(leave.from);
-  const matchesDate = (!startDate || leaveFrom >= startDate) &&
-    (!endDate || leaveFrom <= endDate);
+    const leaveFrom = new Date(leave.from);
+    const matchesDate = (!startDate || leaveFrom >= startDate) &&
+      (!endDate || leaveFrom <= endDate);
 
-  return matchesStatus && matchesType && matchesDepartment && matchesSearch && matchesDate;
-});
+    return matchesStatus && matchesType && matchesDepartment && matchesSearch && matchesDate;
+  });
 
   // Calculate statistics
   const pendingCount = leaveRequests.filter(l => l.status === 'pending').length;
@@ -258,41 +240,10 @@ const filteredLeaves = leaveRequests.filter(leave => {
       notes
     }, {
       onSuccess: () => {
-        // Clear from selected if exists
-        const newSelected = new Set(selectedLeaves);
-        newSelected.delete(id);
-        setSelectedLeaves(newSelected);
-        
         setShowDetailsModal(false);
         setSelectedRequest(null);
       }
     });
-  };
-
-  const handleBulkAction = (status: 'approved' | 'rejected') => {
-    // Process each selected leave
-    const promises = Array.from(selectedLeaves).map(id =>
-      updateLeaveStatusMutation.mutateAsync({
-        id,
-        status,
-        notes: `Bulk ${status}`
-      })
-    );
-
-    Promise.all(promises).then(() => {
-      setSelectedLeaves(new Set());
-      setShowBulkActions(false);
-    });
-  };
-
-  const toggleRowSelection = (id: number) => {
-    const newSelected = new Set(selectedLeaves);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
-    }
-    setSelectedLeaves(newSelected);
   };
 
   const toggleRowExpansion = (id: number) => {
@@ -310,20 +261,20 @@ const filteredLeaves = leaveRequests.filter(leave => {
     setShowDetailsModal(true);
   };
 
-const getEmployeeDetails = (empId: number) => {
-  // First try to find by id
-  let employee = employees.find(e => e.id === empId);
-  
-  // If not found, check if there's an employee object in the leave itself
-  if (!employee) {
-    const leave = leaveRequests.find(l => l.empId === empId);
-    if (leave && leave.employee) {
-      return leave.employee;
+  const getEmployeeDetails = (empId: number) => {
+    // First try to find by id
+    let employee = employees.find(e => e.id === empId);
+    
+    // If not found, check if there's an employee object in the leave itself
+    if (!employee) {
+      const leave = leaveRequests.find(l => l.empId === empId);
+      if (leave && leave.employee) {
+        return leave.employee;
+      }
     }
-  }
-  
-  return employee;
-};
+    
+    return employee;
+  };
 
   const getLeaveTypeColor = (typeName: string) => {
     const leaveType = activeLeaveTypes.find(lt => lt.name === typeName);
@@ -364,39 +315,6 @@ const getEmployeeDetails = (empId: number) => {
       case 'pending': return ClockIcon;
       default: return ClockIcon;
     }
-  };
-
-  // Leave Types Management Functions
-  const handleAddLeaveType = () => {
-    if (!newLeaveType.name || !newLeaveType.code) {
-      alert('Please enter name and code for the leave type');
-      return;
-    }
-
-    const newType: LeaveType = {
-      id: editingLeaveType ? editingLeaveType.id : Date.now(),
-      name: newLeaveType.name,
-      code: newLeaveType.code.toUpperCase(),
-      description: newLeaveType.description || '',
-      color: newLeaveType.color || '#3B82F6',
-      isActive: true,
-      createdAt: editingLeaveType ? editingLeaveType.createdAt : new Date().toISOString().split('T')[0]
-    };
-
-    if (editingLeaveType) {
-      setLeaveTypes?.(prev => prev.map(lt => lt.id === editingLeaveType.id ? newType : lt));
-    } else {
-      setLeaveTypes?.(prev => [...prev, newType]);
-    }
-
-    // Reset form
-    setNewLeaveType({
-      name: '',
-      code: '',
-      description: '',
-      color: '#3B82F6',
-    });
-    setEditingLeaveType(null);
   };
 
   // Animation variants
@@ -453,47 +371,9 @@ const getEmployeeDetails = (empId: number) => {
           <h1 className="text-2xl font-bold text-gray-800">Leave Management</h1>
           <p className="text-gray-500">Review and manage employee leave requests</p>
         </div>
-
-        <div className="flex items-center gap-3">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowLeaveTypesModal(true)}
-            className="px-4 py-2 bg-gradient-to-r from-[#F5A42C] to-[#FFB84D] text-white rounded-xl hover:shadow-lg transition cursor-pointer flex items-center gap-2"
-          >
-            <Settings className="w-4 h-4" />
-            Manage Leave Types
-          </motion.button>
-
-          {selectedLeaves.size > 0 && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-2"
-            >
-              <span className="text-sm text-gray-600">{selectedLeaves.size} selected</span>
-              <button
-                onClick={() => setShowBulkActions(true)}
-                className="px-4 py-2 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-lg text-sm font-medium hover:shadow transition cursor-pointer"
-              >
-                Bulk Actions
-              </button>
-            </motion.div>
-          )}
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowExportModal(true)}
-            className="px-4 py-2 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-xl hover:shadow-lg transition cursor-pointer flex items-center gap-2"
-          >
-            <DownloadCloud className="w-4 h-4" />
-            Export
-          </motion.button>
-        </div>
       </motion.div>
 
-      {/* Statistics Cards - Beautified */}
+      {/* Statistics Cards */}
       <motion.div
         variants={itemVariants}
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
@@ -563,7 +443,7 @@ const getEmployeeDetails = (empId: number) => {
         </motion.div>
       </motion.div>
 
-      {/* Filter and Search Bar - Enhanced */}
+      {/* Filter and Search Bar */}
       <motion.div
         variants={itemVariants}
         className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
@@ -632,7 +512,7 @@ const getEmployeeDetails = (empId: number) => {
         </div>
       </motion.div>
 
-      {/* Leaves Table - Enhanced Design */}
+      {/* Leaves Table */}
       <motion.div
         variants={itemVariants}
         className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
@@ -651,18 +531,6 @@ const getEmployeeDetails = (empId: number) => {
                 Showing {filteredLeaves.length} of {leaveRequests.length} requests
               </p>
             </div>
-
-            <div className="flex items-center gap-2">
-              <div className="text-sm text-gray-600">
-                {selectedLeaves.size > 0 && `${selectedLeaves.size} selected`}
-              </div>
-              <button
-                onClick={() => setSelectedLeaves(new Set())}
-                className="text-sm text-[#6B8DA2] hover:underline cursor-pointer"
-              >
-                Clear selection
-              </button>
-            </div>
           </div>
         </div>
 
@@ -670,20 +538,6 @@ const getEmployeeDetails = (empId: number) => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="text-left px-6 py-4 text-gray-600 font-medium text-sm">
-                  <input
-                    type="checkbox"
-                    checked={filteredLeaves.length > 0 && selectedLeaves.size === filteredLeaves.length}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedLeaves(new Set(filteredLeaves.map(l => l.id)));
-                      } else {
-                        setSelectedLeaves(new Set());
-                      }
-                    }}
-                    className="rounded border-gray-300 text-[#6B8DA2] focus:ring-[#6B8DA2]"
-                  />
-                </th>
                 <th className="text-left px-6 py-4 text-gray-600 font-medium text-sm">Employee</th>
                 <th className="text-left px-6 py-4 text-gray-600 font-medium text-sm">Leave Type</th>
                 <th className="text-left px-6 py-4 text-gray-600 font-medium text-sm">Duration</th>
@@ -697,7 +551,7 @@ const getEmployeeDetails = (empId: number) => {
               <AnimatePresence>
                 {filteredLeaves.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center">
+                    <td colSpan={7} className="px-6 py-12 text-center">
                       <div className="text-gray-400">
                         <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
                         <p className="text-gray-500">No leave requests found</p>
@@ -707,12 +561,12 @@ const getEmployeeDetails = (empId: number) => {
                   </tr>
                 ) : (
                   filteredLeaves.map((leave, index) => {
-                   const employee = getEmployeeDetails(leave.empId);
+                    const employee = getEmployeeDetails(leave.empId);
                     const StatusIcon = getStatusIcon(leave.status);
                     const isExpanded = expandedRows.has(leave.id);
                     const employeeName = employee ? 
-  `${employee.firstName} ${employee.lastName}` : 
-  leave.empName || `Employee ${leave.empId}`;
+                      `${employee.firstName} ${employee.lastName}` : 
+                      leave.empName || `Employee ${leave.empId}`;
 
                     return (
                       <React.Fragment key={leave.id}>
@@ -721,17 +575,8 @@ const getEmployeeDetails = (empId: number) => {
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: 20 }}
                           transition={{ delay: index * 0.05 }}
-                          className={`border-t border-gray-100 group hover:bg-gray-50 ${leave.status === 'pending' ? 'bg-gradient-to-r from-yellow-50/50 to-transparent' : ''
-                            }`}
+                          className={`border-t border-gray-100 group hover:bg-gray-50 ${leave.status === 'pending' ? 'bg-gradient-to-r from-yellow-50/50 to-transparent' : ''}`}
                         >
-                          <td className="px-6 py-4">
-                            <input
-                              type="checkbox"
-                              checked={selectedLeaves.has(leave.id)}
-                              onChange={() => toggleRowSelection(leave.id)}
-                              className="rounded border-gray-300 text-[#6B8DA2] focus:ring-[#6B8DA2]"
-                            />
-                          </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 bg-gradient-to-br from-[#6B8DA2] to-[#F5A42C] rounded-full flex items-center justify-center text-white font-semibold">
@@ -852,7 +697,7 @@ const getEmployeeDetails = (empId: number) => {
                             exit={{ opacity: 0, height: 0 }}
                             className="bg-gray-50"
                           >
-                            <td colSpan={8} className="px-6 py-4">
+                            <td colSpan={7} className="px-6 py-4">
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 {/* Employee Details */}
                                 <div className="space-y-4">
@@ -966,7 +811,7 @@ const getEmployeeDetails = (empId: number) => {
         </div>
       </motion.div>
 
-      {/* Leave Details Modal - Enhanced */}
+      {/* Leave Details Modal */}
       <AnimatePresence>
         {showDetailsModal && selectedRequest && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -1036,7 +881,7 @@ const getEmployeeDetails = (empId: number) => {
                           <motion.button
                             whileHover={{ scale: 1.03 }}
                             whileTap={{ scale: 0.97 }}
-                            onClick={() => handleAction(selectedRequest.id, 'approved', managerNotes[selectedRequest.id])}
+                            onClick={() => handleAction(selectedRequest.id, 'approved')}
                             className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-medium hover:shadow transition cursor-pointer flex items-center justify-center gap-2"
                           >
                             <Check className="w-5 h-5" />
@@ -1045,7 +890,7 @@ const getEmployeeDetails = (empId: number) => {
                           <motion.button
                             whileHover={{ scale: 1.03 }}
                             whileTap={{ scale: 0.97 }}
-                            onClick={() => handleAction(selectedRequest.id, 'rejected', managerNotes[selectedRequest.id])}
+                            onClick={() => handleAction(selectedRequest.id, 'rejected')}
                             className="w-full px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg font-medium hover:shadow transition cursor-pointer flex items-center justify-center gap-2"
                           >
                             <X className="w-5 h-5" />
@@ -1119,83 +964,8 @@ const getEmployeeDetails = (empId: number) => {
                       <p className="text-sm text-gray-600 mb-2">Reason for Leave</p>
                       <p className="text-gray-800 whitespace-pre-wrap">{selectedRequest.reason}</p>
                     </div>
-
-                    {/* Manager Notes */}
-                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4">
-                      <label className="block text-gray-700 font-medium mb-2">Manager Notes</label>
-                      <textarea
-                        value={managerNotes[selectedRequest.id] || selectedRequest.managerNotes || ''}
-                        onChange={(e) => setManagerNotes({
-                          ...managerNotes,
-                          [selectedRequest.id]: e.target.value
-                        })}
-                        rows={3}
-                        className="w-full px-4 py-3 border border-orange-200 rounded-xl focus:outline-none focus:border-[#F5A42C] focus:ring-2 focus:ring-[#F5A42C]/20 bg-white"
-                        placeholder="Add notes or comments about this leave request..."
-                      />
-                      <p className="text-xs text-gray-500 mt-2">
-                        These notes will be saved when you approve or reject this leave
-                      </p>
-                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Bulk Actions Modal */}
-      <AnimatePresence>
-        {showBulkActions && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-md"
-            >
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Bulk Actions</h3>
-              <p className="text-gray-600 mb-6">
-                You have selected {selectedLeaves.size} leave request{selectedLeaves.size !== 1 ? 's' : ''}. Choose an action:
-              </p>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => handleBulkAction('approved')}
-                    className="px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold hover:shadow transition cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <Check className="w-5 h-5" />
-                    Approve All
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => handleBulkAction('rejected')}
-                    className="px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg font-semibold hover:shadow transition cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <X className="w-5 h-5" />
-                    Reject All
-                  </motion.button>
-                </div>
-
-                <div className="text-center text-sm text-gray-500 mt-4">
-                  This action will apply to all selected leave requests
-                </div>
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowBulkActions(false)}
-                  className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition cursor-pointer"
-                >
-                  Cancel
-                </motion.button>
               </div>
             </motion.div>
           </div>

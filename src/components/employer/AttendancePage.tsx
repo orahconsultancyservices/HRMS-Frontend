@@ -1,199 +1,325 @@
+
+
+// src/components/employer/AttendancePage.tsx - ENHANCED WITH TIME PICKER
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Check, X, Clock, Calendar,  Filter, 
-  Search, Mail, Phone, MapPin, Briefcase,
-  FileText, 
-  BarChart3, PieChart, 
-  DownloadCloud, CalendarDays,
-  Users, Target,
-  ChevronLeft,
-  ChevronRight,
-
-  Users as UsersIcon
+import {
+  Check, X, Clock, Calendar, Filter,
+  Search, DownloadCloud, CalendarDays,
+  ChevronLeft, ChevronRight, Edit2, Save, XCircle
 } from 'lucide-react';
-// import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
-import StatCard from '../common/StatCard';
-
-// Define types based on your demo data structure
-interface EmployeeDetail {
-  id: number;
-  name: string;
-  email: string;
-  phone: string;
-  department: string;
-  position: string;
-  joinDate: string;
-  avatar: string;
-  location?: string;
-  status?: 'active' | 'inactive';
-}
-
-interface AttendanceRecord {
-  id: number;
-  empId: number;
-  empName: string;
-  date: string;
-  loginTime: string | null;
-  logoutTime: string | null;
-  hours: string;
-  status: 'present' | 'absent' | 'late' | 'half-day' | 'on-leave';
-  breaks?: number;
-  department?:any;
-  overtime?: string;
-  productivity?: number;
-  location?: string;
-  notes?: string;
-}
-
-interface AttendancePageProps {
-  attendance: AttendanceRecord[];
-  employees?: EmployeeDetail[];
-}
+import { useAttendance, useAttendanceStats } from '../../hooks/useAttendance';
+import { useEmployees } from '../../hooks/useEmployees';
 
 type DateRange = [Date | null, Date | null];
 
-const AttendancePage = ({ 
-  attendance = [], 
-  employees = []
-}: AttendancePageProps) => {
-  const [dateRange, _setDateRange] = useState<DateRange>([null, null]);
+interface EditingRecord {
+  id: number;
+  checkInTime: string;
+  checkOutTime: string;
+  notes: string;
+  status: string;
+}
+
+// Helper function to format time in EST
+const formatTimeEST = (dateTime: string | null) => {
+  if (!dateTime) return '--:--';
+  try {
+    const date = new Date(dateTime);
+    return date.toLocaleTimeString('en-US', {
+      timeZone: 'America/New_York',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  } catch (error) {
+    return '--:--';
+  }
+};
+
+// Helper to extract time from datetime string
+const extractTime = (dateTime: string | null): string => {
+  if (!dateTime) return '';
+  try {
+    const date = new Date(dateTime);
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  } catch (error) {
+    return '';
+  }
+};
+
+// Helper to combine date with time
+const combineDateTime = (originalDateTime: string, newTime: string): string => {
+  if (!originalDateTime || !newTime) return originalDateTime;
+  try {
+    const date = new Date(originalDateTime);
+    const [hours, minutes] = newTime.split(':');
+    date.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    return date.toISOString();
+  } catch (error) {
+    return originalDateTime;
+  }
+};
+
+// Time Input Component
+const TimeInput = ({ 
+  value, 
+  onChange, 
+  label 
+}: { 
+  value: string; 
+  onChange: (time: string) => void; 
+  label: string;
+}) => {
+  return (
+    <div className="flex flex-col">
+      <label className="text-xs text-gray-600 mb-1">{label}</label>
+      <input
+        type="time"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#6B8DA2] focus:ring-2 focus:ring-[#6B8DA2]/20 text-sm"
+      />
+    </div>
+  );
+};
+
+// Status Select Component
+const StatusSelect = ({ 
+  value, 
+  onChange 
+}: { 
+  value: string; 
+  onChange: (status: string) => void;
+}) => {
+  const statuses = [
+    { value: 'present', label: 'Present', color: 'bg-green-100 text-green-700' },
+    { value: 'absent', label: 'Absent', color: 'bg-red-100 text-red-700' },
+    { value: 'late', label: 'Late', color: 'bg-yellow-100 text-yellow-700' },
+    { value: 'half_day', label: 'Half Day', color: 'bg-cyan-100 text-cyan-700' },
+    { value: 'on_leave', label: 'On Leave', color: 'bg-purple-100 text-purple-700' }
+  ];
+
+  return (
+    <div className="flex flex-col">
+      <label className="text-xs text-gray-600 mb-1">Status</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#6B8DA2] focus:ring-2 focus:ring-[#6B8DA2]/20 text-sm"
+      >
+        {statuses.map(status => (
+          <option key={status.value} value={status.value}>
+            {status.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+};
+
+const AttendancePage = () => {
+  const [dateRange, setDateRange] = useState<DateRange>([null, null]);
   const [startDate, endDate] = dateRange;
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedEmployee, setSelectedEmployee] = useState<EmployeeDetail | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [exportFormat, setExportFormat] = useState<'csv' | 'pdf' | 'excel'>('csv');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedDate, setSelectedDate] = useState<{ date: number; fullDate: string } | null>(null);
   const [showDateDetails, setShowDateDetails] = useState(false);
-  
-  // Ensure employees have default values for missing fields
+  const [editingRecord, setEditingRecord] = useState<EditingRecord | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Fetch data
+  const { data: employees = [], isLoading: isLoadingEmployees } = useEmployees();
+
+  const getESTMidnight = (date: Date = new Date()): Date => {
+    const estDate = new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    estDate.setHours(0, 0, 0, 0);
+    return estDate;
+  };
+
+  const attendanceParams = useMemo(() => {
+    const params: any = {
+      department: departmentFilter !== 'all' ? departmentFilter : undefined,
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+    };
+
+    if (startDate) {
+      const estStartDate = getESTMidnight(startDate);
+      params.startDate = estStartDate.toISOString().split('T')[0];
+    }
+    if (endDate) {
+      const estEndDate = getESTMidnight(endDate);
+      params.endDate = estEndDate.toISOString().split('T')[0];
+    }
+
+    return params;
+  }, [departmentFilter, startDate, endDate, statusFilter]);
+
+  const { data: attendanceData = [], isLoading: isLoadingAttendance, refetch } = useAttendance(attendanceParams);
+
+  // Process employees
   const processedEmployees = useMemo(() => {
-    return Array.isArray(employees) 
-      ? employees.map(emp => ({
-          ...emp,
-          location: emp.location || 'Not specified',
-          status: emp.status || 'active',
-          empId: emp.id.toString()
-        }))
-      : [];
+    return employees.map(emp => ({
+      id: emp.id,
+      firstName: emp.firstName,
+      lastName: emp.lastName,
+      employeeId: emp.employeeId,
+      email: emp.email,
+      phone: emp.phone || 'N/A',
+      department: emp.department,
+      position: emp.position,
+      joinDate: emp.joinDate,
+      avatar: emp.avatar,
+      status: emp.isActive ? 'active' : 'inactive'
+    }));
   }, [employees]);
 
-  // Generate demo attendance data for the current month if needed
-  const generatedAttendance = useMemo(() => {
-    // Merge provided attendance with generated data
-    const mergedData = [...(attendance || [])];
-    
-    // If we don't have employees, return existing attendance
-    if (processedEmployees.length === 0) {
-      return mergedData;
-    }
-    
-    // Generate data for current month
-    const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-    let id = mergedData.length > 0 ? Math.max(...mergedData.map(a => a.id)) + 1 : 1000;
-    
-    for (let day = 1; day <= daysInMonth; day++) {
-      // Skip weekends
-      const date = new Date(selectedYear, selectedMonth, day);
-      if (date.getDay() === 0 || date.getDay() === 6) continue;
-      
-      const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      
-      // Check if we already have attendance for this date
-      const existingRecordsForDate = mergedData.filter(a => a.date === dateStr);
-      const existingEmpIds = new Set(existingRecordsForDate.map(a => a.empId));
-      
-      // Generate attendance for employees not already in the data for this date
-      processedEmployees.forEach(emp => {
-        if (!existingEmpIds.has(emp.id)) {
-          // Use consistent random seed based on emp.id and day for reproducibility
-          const seed = (emp.id * 1000 + day) % 100;
-          const statusRandom = seed / 100;
-          
-          let status: 'present' | 'absent' | 'late' | 'half-day' | 'on-leave' = 'present';
-          if (statusRandom < 0.05) status = 'absent';
-          else if (statusRandom < 0.15) status = 'late';
-          else if (statusRandom < 0.18) status = 'half-day';
-          else if (statusRandom < 0.22) status = 'on-leave';
-          
-          const loginTime = status === 'absent' || status === 'on-leave' ? null : 
-                           status === 'late' ? `${Math.floor((seed % 3) + 9)}:${String((seed * 7) % 60).padStart(2, '0')}` : 
-                           '09:00';
-          
-          const logoutTime = status === 'absent' || status === 'on-leave' ? null : '18:00';
-          
-          const hours = status === 'absent' || status === 'on-leave' ? '-' : 
-                       status === 'half-day' ? '4h 00m' : 
-                       status === 'late' ? '8h 30m' : '9h 00m';
-          
-          mergedData.push({
-            id: id++,
-            empId: emp.id,
-            empName: emp.name,
-            date: dateStr,
-            loginTime,
-            logoutTime,
-            status,
-            hours,
-            department: emp.department
-          } as AttendanceRecord);
-        }
-      });
-    }
-    
-    return mergedData;
-  }, [attendance, processedEmployees, selectedMonth, selectedYear]);
+  // Filter attendance
+  const monthlyAttendance = useMemo(() => {
+    const monthStart = new Date(selectedYear, selectedMonth, 1);
+    const monthEnd = new Date(selectedYear, selectedMonth + 1, 0);
 
-  // Filter attendance based on date range, search, and status
-  const filteredAttendance = useMemo(() => {
-    if (!Array.isArray(generatedAttendance)) return [];
-    
-    return generatedAttendance.filter(record => {
-      if (!record) return false;
-      
+    return attendanceData.filter(record => {
       const recordDate = new Date(record.date);
-      const matchesDate = (!startDate || recordDate >= startDate) && 
-                         (!endDate || recordDate <= endDate);
-      const matchesSearch = record.empName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           record.empId?.toString().includes(searchTerm) ||
-                           record.department?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || record.status === statusFilter;
-      
-      return matchesDate && matchesSearch && matchesStatus;
+      return recordDate >= monthStart && recordDate <= monthEnd;
     });
-  }, [generatedAttendance, startDate, endDate, searchTerm, statusFilter]);
+  }, [attendanceData, selectedMonth, selectedYear]);
 
-  // Calculate statistics
+  const filteredAttendance = useMemo(() => {
+    return attendanceData.filter(record => {
+      const employee = processedEmployees.find(e => e.id === record.employeeId);
+      const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : '';
+
+      const matchesSearch =
+        employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        record.employeeId?.toString().includes(searchTerm) ||
+        employee?.department.toLowerCase().includes(searchTerm.toLowerCase());
+
+      return matchesSearch;
+    });
+  }, [attendanceData, processedEmployees, searchTerm]);
+
+  // Statistics
   const presentCount = filteredAttendance.filter(a => a.status === 'present').length;
   const absentCount = filteredAttendance.filter(a => a.status === 'absent').length;
   const lateCount = filteredAttendance.filter(a => a.status === 'late').length;
-  const halfDayCount = filteredAttendance.filter(a => a.status === 'half-day').length;
-  const onLeaveCount = filteredAttendance.filter(a => a.status === 'on-leave').length;
-  
+  const halfDayCount = filteredAttendance.filter(a => a.status === 'half_day').length;
+  const onLeaveCount = filteredAttendance.filter(a => a.status === 'on_leave').length;
+
   const totalRecords = filteredAttendance.length;
-  const attendanceRate = totalRecords > 0 
+  const attendanceRate = totalRecords > 0
     ? ((presentCount / totalRecords) * 100).toFixed(1)
     : '0.0';
-  
-  // const avgHours = totalRecords > 0
-  //   ? filteredAttendance.reduce((acc, curr) => {
-  //       const hourMatch = curr.hours?.match(/(\d+(\.\d+)?)h/);
-  //       const hourValue = hourMatch ? parseFloat(hourMatch[1]) : 0;
-  //       return acc + hourValue;
-  //     }, 0) / totalRecords
-  //   : 0;
 
-  // Calendar view specific functions
+  const uniqueDepartments = Array.from(new Set(processedEmployees.map(e => e.department)));
+
+  // Export function
+  const handleExportMonthly = async () => {
+    try {
+      setIsExporting(true);
+
+      const month = selectedMonth + 1;
+      const year = selectedYear;
+      const dept = departmentFilter !== 'all' ? departmentFilter : undefined;
+
+      const params = new URLSearchParams();
+      params.append('month', month.toString());
+      params.append('year', year.toString());
+      if (dept) params.append('department', dept);
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/attendance/export/monthly?${params.toString()}`,
+        { method: 'GET' }
+      );
+
+      if (!response.ok) throw new Error('Export failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `attendance-EST-${year}-${String(month).padStart(2, '0')}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('❌ Export error:', error);
+      alert('Failed to export attendance. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Edit functions
+  const handleEditRecord = (record: any) => {
+    setEditingRecord({
+      id: record.id,
+      checkInTime: extractTime(record.checkIn),
+      checkOutTime: extractTime(record.checkOut),
+      notes: record.notes || '',
+      status: record.status
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRecord) return;
+
+    try {
+      // Find the original record to get the date
+      const originalRecord = getAttendanceForDate(selectedDate!.date)
+        .find(r => r.id === editingRecord.id);
+
+      if (!originalRecord) {
+        throw new Error('Original record not found');
+      }
+
+      // Combine the date with the new times
+      const newCheckIn = editingRecord.checkInTime 
+        ? combineDateTime(originalRecord.checkIn, editingRecord.checkInTime)
+        : originalRecord.checkIn;
+
+      const newCheckOut = editingRecord.checkOutTime
+        ? combineDateTime(originalRecord.checkOut || originalRecord.checkIn, editingRecord.checkOutTime)
+        : originalRecord.checkOut;
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/attendance/${editingRecord.id}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            checkIn: newCheckIn,
+            checkOut: newCheckOut,
+            notes: editingRecord.notes,
+            status: editingRecord.status
+          })
+        }
+      );
+
+      if (!response.ok) throw new Error('Update failed');
+
+      await refetch();
+      setEditingRecord(null);
+      alert('Attendance updated successfully!');
+    } catch (error) {
+      console.error('❌ Save error:', error);
+      alert('Failed to update attendance. Please try again.');
+    }
+  };
+
+  // Calendar functions
   const getDaysInMonth = (year: number, month: number) => {
-    return new Date(year, month + 1, 0).getDate();
+    return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   };
 
   const getFirstDayOfMonth = (year: number, month: number) => {
-    return new Date(year, month, 1).getDay();
+    return new Date(Date.UTC(year, month, 1)).getUTCDay();
   };
 
   const getMonthName = (monthIndex: number) => {
@@ -201,19 +327,77 @@ const AttendancePage = ({
   };
 
   const getAttendanceForDate = (date: number) => {
-    const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
-    return filteredAttendance.filter(record => record.date === dateStr);
+    const utcDate = new Date(Date.UTC(selectedYear, selectedMonth, date));
+    const targetDateStr = utcDate.toISOString().split('T')[0];
+
+    return monthlyAttendance.filter(record => {
+      if (!record.date) return false;
+      const recordDate = new Date(record.date);
+      const recordDateUTC = new Date(Date.UTC(
+        recordDate.getUTCFullYear(),
+        recordDate.getUTCMonth(),
+        recordDate.getUTCDate()
+      ));
+      const recordDateStr = recordDateUTC.toISOString().split('T')[0];
+      return recordDateStr === targetDateStr;
+    });
+  };
+
+  const generateCalendarDays = () => {
+    const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
+    const firstDayOfMonth = getFirstDayOfMonth(selectedYear, selectedMonth);
+    const days = [];
+    const todayUTC = new Date();
+    const todayUTCStr = todayUTC.toISOString().split('T')[0];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const utcDate = new Date(Date.UTC(selectedYear, selectedMonth, day));
+      const dateStr = utcDate.toISOString().split('T')[0];
+      const dayOfWeek = utcDate.getUTCDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const isToday = dateStr === todayUTCStr;
+      const records = getAttendanceForDate(day);
+      const hasAttendance = records.length > 0;
+
+      let status = 'none';
+      if (hasAttendance) {
+        const presentRecords = records.filter(r => r.status === 'present');
+        const lateRecords = records.filter(r => r.status === 'late');
+        const absentRecords = records.filter(r => r.status === 'absent');
+
+        if (presentRecords.length > 0) {
+          status = 'present';
+        } else if (lateRecords.length > 0) {
+          status = 'late';
+        } else if (absentRecords.length > 0) {
+          status = 'absent';
+        }
+      }
+
+      days.push({
+        date: dateStr,
+        day,
+        records,
+        isToday,
+        isWeekend,
+        hasAttendance,
+        status
+      });
+    }
+
+    return { days, firstDayOfMonth, daysInMonth };
   };
 
   const getDateStatusSummary = (date: number) => {
     const records = getAttendanceForDate(date);
-    const present = records.filter(r => r.status === 'present').length;
-    const absent = records.filter(r => r.status === 'absent').length;
-    const late = records.filter(r => r.status === 'late').length;
-    const onLeave = records.filter(r => r.status === 'on-leave').length;
-    const halfDay = records.filter(r => r.status === 'half-day').length;
-    
-    return { present, absent, late, onLeave, halfDay, total: records.length };
+    return {
+      present: records.filter(r => r.status === 'present').length,
+      absent: records.filter(r => r.status === 'absent').length,
+      late: records.filter(r => r.status === 'late').length,
+      onLeave: records.filter(r => r.status === 'on_leave').length,
+      halfDay: records.filter(r => r.status === 'half_day').length,
+      total: records.length
+    };
   };
 
   const handlePrevMonth = () => {
@@ -235,271 +419,234 @@ const AttendancePage = ({
   };
 
   const handleDateClick = (dayNumber: number) => {
-    const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
-    setSelectedDate({ date: dayNumber, fullDate: dateStr });
+    const utcDate = new Date(Date.UTC(selectedYear, selectedMonth, dayNumber));
+    const dateStr = utcDate.toISOString().split('T')[0];
+
+    setSelectedDate({
+      date: dayNumber,
+      fullDate: dateStr
+    });
     setShowDateDetails(true);
   };
 
-  const handleExport = () => {
-    // Export functionality
-    console.log(`Exporting as ${exportFormat}`);
-    setShowExportModal(false);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'present': return 'bg-green-100 text-green-700 border-green-200';
+      case 'absent': return 'bg-red-100 text-red-700 border-red-200';
+      case 'late': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      case 'half_day': return 'bg-cyan-100 text-cyan-700 border-cyan-200';
+      case 'on_leave': return 'bg-purple-100 text-purple-700 border-purple-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
   };
 
   const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
   const firstDayOfMonth = getFirstDayOfMonth(selectedYear, selectedMonth);
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'present': return 'bg-green-100 text-green-700 border-green-200';
-    case 'absent': return 'bg-red-100 text-red-700 border-red-200';
-    case 'late': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-    case 'half-day': return 'bg-cyan-100 text-cyan-700 border-cyan-200'; 
-    case 'on-leave': return 'bg-purple-100 text-purple-700 border-purple-200';
-    default: return 'bg-gray-100 text-gray-700 border-gray-200';
+  if (isLoadingEmployees || isLoadingAttendance) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#6B8DA2] mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading attendance data...</p>
+        </div>
+      </div>
+    );
   }
-};
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'present': return Check;
-      case 'absent': return X;
-      case 'late': return Clock;
-      case 'half-day': return Clock;
-      case 'on-leave': return Calendar;
-      default: return Clock;
-    }
-  };
-
-  const uniqueDepartments = Array.from(new Set(processedEmployees.map(e => e.department)));
-
-  // Animation variants
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1
-    }
-  };
 
   return (
-    <motion.div 
-      initial="hidden"
-      animate="visible"
-      variants={containerVariants}
-      className="space-y-6"
-    >
-      {/* Header Section */}
-      <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Employee Attendance</h1>
-          <p className="text-gray-600">Monitor and manage employee attendance</p>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] bg-clip-text text-transparent">
+            Employee Attendance
+          </h1>
+          <p className="text-gray-600 mt-1">
+            Monitor and manage employee attendance ·
+            <span className="ml-1 text-sm font-medium text-[#6B8DA2]">
+              🕐 EST/EDT Timezone
+            </span>
+          </p>
         </div>
-      </motion.div>
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={handleExportMonthly}
+          disabled={isExporting}
+          className={`px-6 py-3 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-xl hover:shadow-lg transition cursor-pointer flex items-center gap-2 ${
+            isExporting ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
+        >
+          <DownloadCloud className="w-5 h-5" />
+          {isExporting ? 'Exporting...' : 'Export Monthly Report (EST)'}
+        </motion.button>
+      </div>
 
       {/* Statistics Cards */}
-{/* Statistics Cards */}
-<motion.div 
-  variants={itemVariants}
-  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4" 
->
-  <StatCard 
-    icon={Check} 
-    label="Present" 
-    value={presentCount} 
-    color="bg-gradient-to-r from-green-500 to-green-400"
-    trend={"+12%"}
-  />
-  <StatCard 
-    icon={X} 
-    label="Absent" 
-    value={absentCount} 
-    color="bg-gradient-to-r from-red-500 to-red-400"
-    trend={"-5%"}
-  />
-  <StatCard 
-    icon={Clock} 
-    label="Late Arrivals" 
-    value={lateCount} 
-    color="bg-gradient-to-r from-yellow-500 to-yellow-400"
-    trend={"+3%"}
-  />
-  {/* Added Half Day Card */}
-  <StatCard 
-    icon={Clock} 
-    label="Half Day" 
-    value={halfDayCount} 
-    color="bg-gradient-to-r from-blue-500 to-blue-400"
-    trend={"-2%"}
-  />
-  <StatCard 
-    icon={Calendar} 
-    label="On Leave" 
-    value={onLeaveCount} 
-    color="bg-gradient-to-r from-purple-500 to-purple-400"
-    trend={"0%"}
-  />
-  <div className="bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] rounded-xl p-6 text-white shadow-lg">
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="font-semibold">Attendance Rate</h3>
-      <Target className="w-5 h-5 text-white/80" />
-    </div>
-    <p className="text-3xl font-bold">{attendanceRate}%</p>
-    <p className="text-sm text-white/80 mt-2">Overall attendance</p>
-  </div>
-</motion.div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+        <motion.div whileHover={{ y: -5 }} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-800 text-sm">Present</h3>
+            <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-400 rounded-lg flex items-center justify-center">
+              <Check className="w-5 h-5 text-white" />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-green-600">{presentCount}</p>
+        </motion.div>
 
-      {/* Filter and Search Bar */}
-      <motion.div 
-        variants={itemVariants}
-        className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
-      >
+        <motion.div whileHover={{ y: -5 }} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-800 text-sm">Absent</h3>
+            <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-400 rounded-lg flex items-center justify-center">
+              <X className="w-5 h-5 text-white" />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-red-600">{absentCount}</p>
+        </motion.div>
+
+        <motion.div whileHover={{ y: -5 }} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-800 text-sm">Late</h3>
+            <div className="w-10 h-10 bg-gradient-to-br from-yellow-500 to-yellow-400 rounded-lg flex items-center justify-center">
+              <Clock className="w-5 h-5 text-white" />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-yellow-600">{lateCount}</p>
+        </motion.div>
+
+        <motion.div whileHover={{ y: -5 }} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-800 text-sm">Half Day</h3>
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-400 rounded-lg flex items-center justify-center">
+              <Clock className="w-5 h-5 text-white" />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-blue-600">{halfDayCount}</p>
+        </motion.div>
+
+        <motion.div whileHover={{ y: -5 }} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-800 text-sm">On Leave</h3>
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-400 rounded-lg flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-white" />
+            </div>
+          </div>
+          <p className="text-3xl font-bold text-purple-600">{onLeaveCount}</p>
+        </motion.div>
+
+        <motion.div whileHover={{ y: -5 }} className="bg-gradient-to-br from-[#6B8DA2] to-[#F5A42C] rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-sm">Rate</h3>
+          </div>
+          <p className="text-3xl font-bold">{attendanceRate}%</p>
+        </motion.div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-3 w-5 h-5 text-gray-600" />
+              <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search employees by name, ID, or department..."
+                placeholder="Search by employee name, ID, or department..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-[#6B8DA2] focus:ring-2 focus:ring-[#6B8DA2]/20"
               />
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <Filter className="w-5 h-5 text-gray-600" />
               <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                value={departmentFilter}
+                onChange={(e) => setDepartmentFilter(e.target.value)}
                 className="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#6B8DA2] bg-white"
               >
-                <option value="all">All Status</option>
-                <option value="present">Present</option>
-                <option value="absent">Absent</option>
-                <option value="late">Late</option>
-                <option value="half-day">Half Day</option>
-                <option value="on-leave">On Leave</option>
+                <option value="all">All Departments</option>
+                {uniqueDepartments.map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
               </select>
             </div>
 
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setShowExportModal(true)}
-              className="px-4 py-2 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-xl hover:shadow-lg transition cursor-pointer flex items-center gap-2"
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#6B8DA2] bg-white"
             >
-              <DownloadCloud className="w-4 h-4" />
-              Export
-            </motion.button>
+              <option value="all">All Status</option>
+              <option value="present">Present</option>
+              <option value="absent">Absent</option>
+              <option value="late">Late</option>
+              <option value="half_day">Half Day</option>
+              <option value="on_leave">On Leave</option>
+            </select>
           </div>
         </div>
-      </motion.div>
+      </div>
 
-      {/* Main Content Area - Calendar Only */}
-      <motion.div
-        key="calendar"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
-      >
-        {/* Calendar Header */}
-        <div className="p-6 border-b border-gray-100">
+      {/* Calendar */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-[#6B8DA2]/5 to-[#F5A42C]/5">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-800 text-lg flex items-center gap-2">
               <CalendarDays className="w-5 h-5 text-[#6B8DA2]" />
-              Attendance Calendar
-              <span className="text-sm font-normal text-gray-600 ml-2">
+              Attendance Calendar (EST)
+            </h3>
+            <div className="flex items-center gap-2">
+              <button onClick={handlePrevMonth} className="p-2 hover:bg-gray-100 rounded-lg">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-gray-700 font-medium min-w-[150px] text-center">
                 {getMonthName(selectedMonth)} {selectedYear}
               </span>
-            </h3>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={handlePrevMonth}
-                  className="p-2 hover:bg-gray-100 rounded-lg cursor-pointer border border-gray-300"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </motion.button>
-                <span className="text-gray-700 font-medium">
-                  {getMonthName(selectedMonth)} {selectedYear}
-                </span>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={handleNextMonth}
-                  className="p-2 hover:bg-gray-100 rounded-lg cursor-pointer border border-gray-300"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </motion.button>
-              </div>
+              <button onClick={handleNextMonth} className="p-2 hover:bg-gray-100 rounded-lg">
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Calendar Grid */}
         <div className="p-6">
           <div className="grid grid-cols-7 gap-2 mb-4">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-              <div key={day} className="text-center text-gray-600 font-medium py-2">
-                {day}
-              </div>
+              <div key={day} className="text-center text-gray-600 font-medium py-2">{day}</div>
             ))}
-            
-            {/* Empty cells for days before the first day of month */}
+
             {Array.from({ length: firstDayOfMonth }).map((_, index) => (
               <div key={`empty-${index}`} className="min-h-32 rounded-lg bg-gray-50 p-2" />
             ))}
-            
-            {/* Calendar days */}
-            {Array.from({ length: daysInMonth }).map((_, index) => {
-              const dayNumber = index + 1;
-              const isToday = new Date().getDate() === dayNumber && 
-                              new Date().getMonth() === selectedMonth && 
-                              new Date().getFullYear() === selectedYear;
-              const statusSummary = getDateStatusSummary(dayNumber);
-              const hasAttendance = statusSummary.total > 0;
-              
+
+            {generateCalendarDays().days.map(({ day, date, records, isToday, isWeekend, hasAttendance, status }) => {
+              const statusSummary = getDateStatusSummary(day);
+
               return (
                 <motion.div
-                  key={dayNumber}
+                  key={day}
                   whileHover={{ scale: 1.02 }}
                   className={`min-h-32 rounded-lg border p-3 transition-all cursor-pointer ${
-                    isToday 
-                      ? 'border-[#F5A42C] bg-gradient-to-br from-[#F5A42C]/10 to-[#F5A42C]/5 shadow-sm' 
-                      : 'border-gray-200 hover:border-[#6B8DA2] hover:shadow-sm'
+                    isToday
+                      ? 'border-[#F5A42C] bg-gradient-to-br from-[#F5A42C]/10 to-[#F5A42C]/5'
+                      : 'border-gray-200 hover:border-[#6B8DA2]'
                   } ${hasAttendance ? 'bg-white' : 'bg-gray-50'}`}
-                  onClick={() => handleDateClick(dayNumber)}
+                  onClick={() => handleDateClick(day)}
                 >
                   <div className="flex justify-between items-center mb-2">
                     <span className={`font-semibold ${isToday ? 'text-[#F5A42C]' : 'text-gray-700'}`}>
-                      {dayNumber}
-                      {isToday && (
-                        <span className="ml-1 text-xs text-[#F5A42C] font-normal">Today</span>
-                      )}
+                      {day}
                     </span>
                     {hasAttendance && (
-                      <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
-                        {statusSummary.total} records
+                      <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                        {records.length}
                       </span>
                     )}
                   </div>
-                  
+
                   {hasAttendance ? (
                     <div className="space-y-2">
                       {statusSummary.present > 0 && (
@@ -508,611 +655,213 @@ const getStatusColor = (status: string) => {
                             <div className="w-2 h-2 rounded-full bg-green-500"></div>
                             <span className="text-xs text-gray-600">Present</span>
                           </div>
-                          <span className="text-xs font-bold text-green-600">{statusSummary.present}</span>
+                          <span className="text-xs font-bold text-green-600">
+                            {statusSummary.present}
+                          </span>
                         </div>
                       )}
-                      
-                      {statusSummary.absent > 0 && (
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                            <span className="text-xs text-gray-600">Absent</span>
-                          </div>
-                          <span className="text-xs font-bold text-red-600">{statusSummary.absent}</span>
-                        </div>
-                      )}
-                      
+
                       {statusSummary.late > 0 && (
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1">
                             <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
                             <span className="text-xs text-gray-600">Late</span>
                           </div>
-                          <span className="text-xs font-bold text-yellow-600">{statusSummary.late}</span>
+                          <span className="text-xs font-bold text-yellow-600">
+                            {statusSummary.late}
+                          </span>
                         </div>
                       )}
-                      
+
+                      {statusSummary.absent > 0 && (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                            <span className="text-xs text-gray-600">Absent</span>
+                          </div>
+                          <span className="text-xs font-bold text-red-600">
+                            {statusSummary.absent}
+                          </span>
+                        </div>
+                      )}
+
                       {statusSummary.onLeave > 0 && (
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1">
                             <div className="w-2 h-2 rounded-full bg-purple-500"></div>
                             <span className="text-xs text-gray-600">On Leave</span>
                           </div>
-                          <span className="text-xs font-bold text-purple-600">{statusSummary.onLeave}</span>
-                        </div>
-                      )}
-
-                      {statusSummary.halfDay > 0 && (
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                            <span className="text-xs text-gray-600">Half Day</span>
-                          </div>
-                          <span className="text-xs font-bold text-blue-600">{statusSummary.halfDay}</span>
+                          <span className="text-xs font-bold text-purple-600">
+                            {statusSummary.onLeave}
+                          </span>
                         </div>
                       )}
                     </div>
                   ) : (
                     <div className="h-full flex items-center justify-center">
-                      <span className="text-gray-600 text-sm">No records</span>
+                      <span className="text-gray-400 text-xs">
+                        {isWeekend ? 'Weekend' : 'No records'}
+                      </span>
                     </div>
                   )}
                 </motion.div>
               );
             })}
           </div>
-          
-          {/* Legend */}
-          <div className="flex flex-wrap gap-4 mt-6 pt-4 border-t border-gray-100">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-green-500"></div>
-              <span className="text-sm text-gray-600">Present</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-500"></div>
-              <span className="text-sm text-gray-600">Absent</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-              <span className="text-sm text-gray-600">Late</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-              <span className="text-sm text-gray-600">On Leave</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-              <span className="text-sm text-gray-600">Half Day</span>
-            </div>
-          </div>
         </div>
-      </motion.div>
+      </div>
 
-      {/* Additional Stats Section */}
-      <motion.div 
-        variants={itemVariants}
-        className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-      >
-        {/* Department Breakdown */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-300">
-          <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-[#6B8DA2]" />
-            Department Distribution
-          </h3>
-          <div className="space-y-4">
-            {uniqueDepartments.length > 0 ? (
-              uniqueDepartments.map((dept, i) => {
-                const deptCount = processedEmployees.filter(e => e.department === dept).length;
-                const percentage = (deptCount / processedEmployees.length) * 100;
-                return (
-                  <div key={dept} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${
-                        i === 0 ? 'bg-[#4A6A82]' : 
-                        i === 1 ? 'bg-[#F5A42C]' : 
-                        i === 2 ? 'bg-green-500' : 
-                        i === 3 ? 'bg-purple-500' : 
-                        'bg-blue-500'
-                      }`} />
-                      <span className="text-sm font-medium">{dept}</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="w-32 bg-gray-200 rounded-full h-2 overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full ${
-                            i === 0 ? 'bg-[#6B8DA2]' : 
-                            i === 1 ? 'bg-[#F5A42C]' : 
-                            i === 2 ? 'bg-green-500' : 
-                            i === 3 ? 'bg-purple-500' : 
-                            'bg-blue-500'
-                          }`}
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                      <span className="text-sm font-bold">{deptCount}</span>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="text-center py-8 text-gray-600">
-                <Briefcase className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                <p>No department data available</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Attendance Overview */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-300">
-          <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <PieChart className="w-5 h-5 text-[#F5A42C]" />
-            Attendance Overview
-          </h3>
-          <div className="flex items-center justify-center h-48">
-            <div className="relative w-40 h-40">
-              {presentCount + absentCount > 0 ? (
-                <>
-                  <div className="absolute inset-0 rounded-full border-8 border-green-500"></div>
-                  <div className="absolute inset-0 rounded-full border-8 border-red-500" 
-                    style={{ 
-                      clipPath: `inset(0 ${Math.max(0, 100 - (absentCount / (presentCount + absentCount) * 100))}% 0 0)` 
-                    }}
-                  ></div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-gray-800">{attendanceRate}%</div>
-                      <div className="text-gray-600 text-sm">Attendance Rate</div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-300">0%</div>
-                    <div className="text-gray-600 text-sm">No data</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex justify-center gap-6 mt-4">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span className="text-sm">Present ({presentCount})</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-              <span className="text-sm">Absent ({absentCount})</span>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Daily Details Modal */}
+      {/* Date Details Modal */}
       <AnimatePresence>
         {showDateDetails && selectedDate && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <motion.div 
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto my-8"
             >
-              {/* Modal Header */}
-              <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-[#6B8DA2]/10 to-[#F5A42C]/10">
+              <div className="p-6 border-b border-gray-100 sticky top-0 z-10 bg-white">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-xl font-bold text-gray-800">Attendance Details</h3>
+                    <h3 className="text-xl font-bold text-gray-800">Attendance Details (EST)</h3>
                     <p className="text-gray-600 mt-1">
-                      {new Date(selectedDate.fullDate).toLocaleDateString('en-US', { 
-                        weekday: 'long', 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric' 
+                      {new Date(`${selectedDate.fullDate}T00:00:00.000Z`).toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        timeZone: 'UTC'
                       })}
                     </p>
                   </div>
                   <button 
-                    onClick={() => setShowDateDetails(false)}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition cursor-pointer"
+                    onClick={() => { 
+                      setShowDateDetails(false); 
+                      setEditingRecord(null); 
+                    }} 
+                    className="p-2 hover:bg-gray-100 rounded-lg"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
               </div>
-              
-              {/* Modal Content */}
+
               <div className="p-6">
-                {/* Summary Stats */}
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
-                  {[
-                    { label: 'Total Employees', value: processedEmployees.length, icon: UsersIcon, color: 'bg-blue-100 text-blue-600' },
-                    { label: 'Present', value: getDateStatusSummary(selectedDate.date).present, icon: Check, color: 'bg-green-100 text-green-600' },
-                    { label: 'Absent', value: getDateStatusSummary(selectedDate.date).absent, icon: X, color: 'bg-red-100 text-red-600' },
-                    { label: 'Late', value: getDateStatusSummary(selectedDate.date).late, icon: Clock, color: 'bg-yellow-100 text-yellow-600' },
-                     { label: 'Half Day', value: getDateStatusSummary(selectedDate.date).halfDay, icon: Clock, color: 'bg-blue-100 text-blue-600' },
-                    { label: 'On Leave', value: getDateStatusSummary(selectedDate.date).onLeave, icon: Calendar, color: 'bg-purple-100 text-purple-600' },
-                  ].map((stat, index) => {
-                    const Icon = stat.icon;
-                    return (
-                      <div key={index} className="bg-white border border-gray-200 rounded-xl p-4">
-                        <div className="flex items-center justify-between">
-                          <div className={`p-2 rounded-lg ${stat.color.split(' ')[0]}`}>
-                            <Icon className={`w-5 h-5 ${stat.color.split(' ')[1]}`} />
-                          </div>
-                          <div className="text-right">
-                            <div className="text-2xl font-bold text-gray-800">{stat.value}</div>
-                            <div className="text-sm text-gray-600 whitespace-nowrap">{stat.label}</div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                
-                {/* Attendance Table */}
                 <div className="bg-gray-50 rounded-xl p-4">
-                  <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <Users className="w-5 h-5 text-[#6B8DA2]" />
-                    Employee Attendance for {selectedDate.date} {getMonthName(selectedMonth)} {selectedYear}
-                  </h4>
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
                         <tr className="bg-white border-b border-gray-200">
                           <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Employee</th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Department</th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Status</th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Login Time</th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Logout Time</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Check In (EST)</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Check Out (EST)</th>
                           <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Hours</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Break</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Status</th>
                           <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {getAttendanceForDate(selectedDate.date).length > 0 ? (
-                          getAttendanceForDate(selectedDate.date).map((record) => {
-                            const employee = processedEmployees.find(emp => emp.id === record.empId);
-                            const StatusIcon = getStatusIcon(record.status);
-                            
-                            return (
-                              <tr key={record.id} className="border-t border-gray-200 hover:bg-white transition-colors">
-                                <td className="py-3 px-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-gradient-to-br from-[#6B8DA2] to-[#F5A42C] rounded-full flex items-center justify-center text-white font-semibold">
-                                      {employee?.avatar || record.empName?.charAt(0) || '?'}
-                                    </div>
-                                    <div>
-                                      <div className="font-medium text-gray-800">{record.empName || 'Unknown'}</div>
-                                      <div className="text-sm text-gray-600">ID: {record.empId}</div>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="py-3 px-4 text-gray-600">
-                                  {employee?.department || 'N/A'}
-                                </td>
-                                <td className="py-3 px-4">
-                                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}>
-                                    <StatusIcon className="w-3 h-3 inline-block mr-1" />
-                                    {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
+                        {getAttendanceForDate(selectedDate.date).map((record) => {
+                          const employee = processedEmployees.find(emp => emp.id === record.employeeId);
+                          const isEditing = editingRecord?.id === record.id;
+
+                          return (
+                            <tr key={record.id} className="border-t border-gray-200">
+                              <td className="py-3 px-4">
+                                <div className="font-medium text-gray-800">
+                                  {employee ? `${employee.firstName} ${employee.lastName}` : 'Unknown'}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                {isEditing ? (
+                                  <TimeInput
+                                    value={editingRecord.checkInTime}
+                                    onChange={(time) => setEditingRecord({ 
+                                      ...editingRecord, 
+                                      checkInTime: time 
+                                    })}
+                                    label=""
+                                  />
+                                ) : (
+                                  <span className="font-medium">{formatTimeEST(record.checkIn)}</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4">
+                                {isEditing ? (
+                                  <TimeInput
+                                    value={editingRecord.checkOutTime}
+                                    onChange={(time) => setEditingRecord({ 
+                                      ...editingRecord, 
+                                      checkOutTime: time 
+                                    })}
+                                    label=""
+                                  />
+                                ) : (
+                                  <span className="font-medium">{formatTimeEST(record.checkOut)}</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 font-bold">
+                                {record.totalHours ? `${record.totalHours.toFixed(1)}h` : '-'}
+                              </td>
+                              <td className="py-3 px-4">{record.breaks ? `${record.breaks}m` : '-'}</td>
+                              <td className="py-3 px-4">
+                                {isEditing ? (
+                                  <StatusSelect
+                                    value={editingRecord.status}
+                                    onChange={(status) => setEditingRecord({ 
+                                      ...editingRecord, 
+                                      status 
+                                    })}
+                                  />
+                                ) : (
+                                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(record.status)}`}>
+                                    {record.status.replace('_', ' ')}
                                   </span>
-                                </td>
-                                <td className="py-3 px-4 font-medium text-gray-800">
-                                  {record.loginTime || '--:--'}
-                                </td>
-                                <td className="py-3 px-4 font-medium text-gray-800">
-                                  {record.logoutTime || '--:--'}
-                                </td>
-                                <td className="py-3 px-4 font-bold text-gray-800">
-                                  {record.hours || '-'}
-                                </td>
-                                <td className="py-3 px-4">
-                                  <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={() => {
-                                      const emp = processedEmployees.find(e => e.id === record.empId);
-                                      if (emp) setSelectedEmployee(emp);
-                                    }}
-                                    className="text-sm text-[#6B8DA2] hover:text-[#F5A42C] hover:underline cursor-pointer px-3 py-1 rounded-lg hover:bg-gray-100"
+                                )}
+                              </td>
+                              <td className="py-3 px-4">
+                                {isEditing ? (
+                                  <div className="flex gap-2">
+                                    <button 
+                                      onClick={handleSaveEdit} 
+                                      className="text-green-600 p-1 hover:bg-green-50 rounded"
+                                      title="Save"
+                                    >
+                                      <Save className="w-4 h-4" />
+                                    </button>
+                                    <button 
+                                      onClick={() => setEditingRecord(null)} 
+                                      className="text-red-600 p-1 hover:bg-red-50 rounded"
+                                      title="Cancel"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button 
+                                    onClick={() => handleEditRecord(record)} 
+                                    className="text-[#6B8DA2] p-1 hover:bg-blue-50 rounded"
+                                    title="Edit"
                                   >
-                                    View Profile
-                                  </motion.button>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        ) : (
-                          <tr>
-                            <td colSpan={7} className="py-8 text-center text-gray-600">
-                              <Calendar className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                              <p className="text-lg">No attendance records for this day</p>
-                              <p className="text-gray-600">Try selecting a different date</p>
-                            </td>
-                          </tr>
-                        )}
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 </div>
-                
-                {/* Notes Section */}
-                <div className="mt-6">
-                  <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-[#6B8DA2]" />
-                    Daily Notes
-                  </h4>
-                  <textarea
-                    placeholder="Add notes about this day's attendance..."
-                    className="w-full h-32 p-4 border border-gray-300 rounded-xl focus:outline-none focus:border-[#6B8DA2] focus:ring-2 focus:ring-[#6B8DA2]/20 resize-none"
-                    defaultValue="All present employees worked on project deliverables. Team meeting scheduled for tomorrow."
-                  />
-                </div>
-              </div>
-              
-              {/* Modal Footer */}
-              <div className="p-6 border-t border-gray-100 bg-gray-50">
-                <div className="flex justify-end gap-3">
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setShowDateDetails(false)}
-                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition cursor-pointer"
-                  >
-                    Close
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="px-6 py-3 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-xl font-medium hover:shadow-lg transition cursor-pointer"
-                  >
-                    Download Report
-                  </motion.button>
-                </div>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
-      {/* Employee Detail Modal */}
-      <AnimatePresence>
-        {selectedEmployee && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
-            >
-              {/* Modal Header */}
-              <div className="p-6 border-b border-gray-100">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-bold text-gray-800">Employee Profile</h3>
-                  <button 
-                    onClick={() => setSelectedEmployee(null)}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition cursor-pointer"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-              
-              {/* Modal Content */}
-              <div className="p-6">
-                <div className="flex flex-col md:flex-row gap-6">
-                  {/* Left Column - Profile */}
-                  <div className="md:w-1/3 space-y-6">
-                    <div className="text-center">
-                      <div className="w-32 h-32 bg-gradient-to-br from-[#6B8DA2] to-[#F5A42C] rounded-full flex items-center justify-center text-white text-4xl font-bold mx-auto mb-4">
-                        {selectedEmployee.avatar || selectedEmployee.name.charAt(0)}
-                      </div>
-                      <h4 className="text-xl font-bold text-gray-800">{selectedEmployee.name}</h4>
-                      <p className="text-gray-600">{selectedEmployee.position}</p>
-                      <p className="text-sm text-gray-600 mt-1">ID: {selectedEmployee.id}</p>
-                      
-                      <div className="mt-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          selectedEmployee.status === 'active' 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-gray-100 text-gray-700'
-                        }`}>
-                          {selectedEmployee.status?.toUpperCase() || 'ACTIVE'}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3">
-                        <Mail className="w-5 h-5 text-gray-600" />
-                        <span className="text-gray-700">{selectedEmployee.email}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Phone className="w-5 h-5 text-gray-600" />
-                        <span className="text-gray-700">{selectedEmployee.phone}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <MapPin className="w-5 h-5 text-gray-600" />
-                        <span className="text-gray-700">{selectedEmployee.location}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Briefcase className="w-5 h-5 text-gray-600" />
-                        <span className="text-gray-700">{selectedEmployee.department}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Calendar className="w-5 h-5 text-gray-600" />
-                        <span className="text-gray-700">Joined: {selectedEmployee.joinDate}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Right Column - Attendance History */}
-                  <div className="md:w-2/3">
-                    <h4 className="font-semibold text-gray-800 mb-4">Attendance History (Last 30 Days)</h4>
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead>
-                            <tr>
-                              <th className="text-left py-2 text-sm font-medium text-gray-600">Date</th>
-                              <th className="text-left py-2 text-sm font-medium text-gray-600">Status</th>
-                              <th className="text-left py-2 text-sm font-medium text-gray-600">Hours</th>
-                              <th className="text-left py-2 text-sm font-medium text-gray-600">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filteredAttendance
-                              .filter(a => a.empId === selectedEmployee.id)
-                              .slice(0, 7)
-                              .map(att => (
-                                <tr key={att.id} className="border-t border-gray-200">
-                                  <td className="py-2 text-sm">{att.date}</td>
-                                  <td className="py-2">
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(att.status)}`}>
-                                      {att.status}
-                                    </span>
-                                  </td>
-                                  <td className="py-2 text-sm font-medium">{att.hours}</td>
-                                  <td className="py-2">
-                                    <button className="text-[#6B8DA2] text-sm hover:underline cursor-pointer">
-                                      View
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                    
-                    {/* Quick Stats */}
-                    <div className="grid grid-cols-3 gap-4 mt-6">
-                      <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-                        <div className="text-2xl font-bold text-[#6B8DA2]">{attendanceRate}%</div>
-                        <div className="text-xs text-gray-600">Attendance Rate</div>
-                      </div>
-                      <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-                        <div className="text-2xl font-bold text-green-600">{presentCount}</div>
-                        <div className="text-xs text-gray-600">Present Days</div>
-                      </div>
-                      <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-                        <div className="text-2xl font-bold text-yellow-600">{lateCount}</div>
-                        <div className="text-xs text-gray-600">Late Days</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Modal Footer */}
-              <div className="p-6 border-t border-gray-100 bg-gray-50">
-                <div className="flex justify-end gap-3">
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setSelectedEmployee(null)}
-                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition cursor-pointer"
-                  >
-                    Close
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="px-6 py-3 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-xl font-medium hover:shadow-lg transition cursor-pointer"
-                  >
-                    View Full Profile
-                  </motion.button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Export Modal */}
-      <AnimatePresence>
-        {showExportModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-md"
-            >
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Export Attendance Data</h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-gray-700 mb-2">Export Format</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {['csv', 'pdf', 'excel'].map((format) => (
-                      <motion.button
-                        key={format}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setExportFormat(format as any)}
-                        className={`px-4 py-3 rounded-lg border-2 cursor-pointer ${
-                          exportFormat === format 
-                            ? 'border-[#6B8DA2] bg-gradient-to-r from-[#6B8DA2]/10 to-[#F5A42C]/10 text-[#6B8DA2]' 
-                            : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        {format.toUpperCase()}
-                      </motion.button>
-                    ))}
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-gray-700 mb-2">Date Range</label>
-                  <div className="flex items-center gap-2 bg-gray-50 px-4 py-3 rounded-lg">
-                    <Calendar className="w-5 h-5 text-gray-600" />
-                    <span>
-                      {startDate && endDate 
-                        ? `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`
-                        : 'All Dates'
-                      }
-                    </span>
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-gray-700 mb-2">Include Details</label>
-                  <div className="space-y-2">
-                    {['Employee Information', 'Attendance History', 'Department Stats', 'Productivity Metrics'].map((item) => (
-                      <label key={item} className="flex items-center gap-3 cursor-pointer">
-                        <input type="checkbox" defaultChecked className="w-4 h-4 text-[#6B8DA2] rounded" />
-                        <span className="text-gray-700">{item}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex gap-3 mt-6">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleExport}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-lg font-semibold hover:shadow-lg transition cursor-pointer"
-                >
-                  Export Data
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowExportModal(false)}
-                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition cursor-pointer"
-                >
-                  Cancel
-                </motion.button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+    </div>
   );
 };
 

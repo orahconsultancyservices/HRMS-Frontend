@@ -1,3 +1,5 @@
+// src/components/employee/TaskManagement.tsx - INTEGRATED WITH API
+
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -15,6 +17,12 @@ import {
   ScatterChart, Scatter, ComposedChart
 } from 'recharts';
 
+// Import hooks
+import { 
+  useEmployeeTasks, 
+  useSubmitTaskProgress, 
+  useTaskAnalytics 
+} from '../../hooks/useTasks';
 
 // Types
 interface Task {
@@ -30,24 +38,30 @@ interface Task {
   status: 'active' | 'completed' | 'overdue';
   assignedDate: string;
   priority: 'low' | 'medium' | 'high';
+  assignedToId?: number;
+  assignedById?: number;
+  assignedTo?: {
+    id: number;
+    firstName: string;
+    lastName: string;
+    employeeId: string;
+  };
+  assignedBy?: {
+    id: number;
+    firstName: string;
+    lastName: string;
+    employeeId: string;
+  };
+  submissions?: any[];
 }
-
-interface TaskSubmission {
-  taskId: number;
-  count: number;
-  date: string;
-  notes: string;
-}
-
 
 interface DailySubmission {
   date: string;
   count: number;
   goal: number;
-  efficiency: number; // percentage
+  efficiency: number;
   dayOfWeek: string;
 }
-
 
 interface AnalyticsData {
   dailySubmissions: DailySubmission[];
@@ -56,7 +70,7 @@ interface AnalyticsData {
   performanceMetrics: {
     avgDaily: number;
     peakDay: { date: string; count: number };
-    consistency: number; // percentage
+    consistency: number;
     totalSubmitted: number;
   };
   categoryDistribution: { name: string; value: number; color: string }[];
@@ -72,164 +86,12 @@ interface TaskManagementProps {
   employee: Employee;
 }
 
-// Demo data
-const demoTasks: Task[] = [
-  {
-    id: 1,
-    title: 'Daily LinkedIn Applications',
-    description: 'Apply to job postings on LinkedIn for various positions',
-    type: 'daily',
-    category: 'applications',
-    target: 50,
-    achieved: 35,
-    unit: 'applications',
-    deadline: new Date().toISOString().split('T')[0],
-    status: 'active',
-    assignedDate: new Date().toISOString().split('T')[0],
-    priority: 'high'
-  },
-  {
-    id: 2,
-    title: 'Weekly Interview Scheduling',
-    description: 'Schedule and coordinate interviews with candidates',
-    type: 'weekly',
-    category: 'interviews',
-    target: 15,
-    achieved: 12,
-    unit: 'interviews',
-    deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'active',
-    assignedDate: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    priority: 'medium'
-  },
-  {
-    id: 3,
-    title: 'Monthly Assessment Completion',
-    description: 'Complete skill assessments for candidate evaluation',
-    type: 'monthly',
-    category: 'assessments',
-    target: 100,
-    achieved: 78,
-    unit: 'assessments',
-    deadline: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'active',
-    assignedDate: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    priority: 'high'
-  },
-  {
-    id: 4,
-    title: 'Daily Follow-up Calls',
-    description: 'Follow up with candidates after application submission',
-    type: 'daily',
-    category: 'interviews',
-    target: 20,
-    achieved: 20,
-    unit: 'calls',
-    deadline: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'completed',
-    assignedDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    priority: 'medium'
-  },
-  {
-    id: 5,
-    title: 'Weekly Job Portal Applications',
-    description: 'Apply to positions on various job portals (Naukri, Indeed, etc.)',
-    type: 'weekly',
-    category: 'applications',
-    target: 200,
-    achieved: 145,
-    unit: 'applications',
-    deadline: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'active',
-    assignedDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    priority: 'high'
-  }
-];
-
-const generateDemoAnalytics = (taskType: 'weekly' | 'monthly', target: number): AnalyticsData => {
-  const today = new Date();
-  const daysInWeek = 7;
-  const daysInMonth = 30;
-  
-  // Generate daily submissions for weekly/monthly tasks
-  const dailySubmissions: DailySubmission[] = [];
-  const days = taskType === 'weekly' ? daysInWeek : daysInMonth;
-  
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - i);
-    
-    const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'short' });
-    const dayGoal = Math.floor(target / days);
-    const randomCount = Math.floor(dayGoal * (0.5 + Math.random() * 0.8));
-    const efficiency = (randomCount / dayGoal) * 100;
-    
-    dailySubmissions.push({
-      date: date.toISOString().split('T')[0],
-      count: randomCount,
-      goal: dayGoal,
-      efficiency: Math.min(efficiency, 100),
-      dayOfWeek: dayOfWeek
-    });
-  }
-  
-  // Generate weekly trend data
-  const weeklyTrend = [];
-  for (let i = 3; i >= 0; i--) {
-    const weekStart = new Date(today);
-    weekStart.setDate(weekStart.getDate() - (i * 7));
-    weeklyTrend.push({
-      week: `Week ${4 - i}`,
-      target: target,
-      achieved: Math.floor(target * (0.6 + Math.random() * 0.4))
-    });
-  }
-  
-  // Monthly breakdown
-  const monthlyBreakdown = [
-    { month: 'Applications', value: 65 },
-    { month: 'Interviews', value: 20 },
-    { month: 'Assessments', value: 15 }
-  ];
-  
-  // Calculate performance metrics
-  const totalSubmitted = dailySubmissions.reduce((sum, day) => sum + day.count, 0);
-  const avgDaily = totalSubmitted / days;
-  const peakDay = dailySubmissions.reduce((max, day) => 
-    day.count > max.count ? day : max, dailySubmissions[0]
-  );
-  const consistency = (dailySubmissions.filter(d => d.efficiency >= 80).length / days) * 100;
-  
-  // Category distribution
-  const categoryDistribution = [
-    { name: 'LinkedIn', value: 40, color: '#0077B5' },
-    { name: 'Naukri', value: 30, color: '#4CAF50' },
-    { name: 'Indeed', value: 20, color: '#2196F3' },
-    { name: 'Other', value: 10, color: '#9C27B0' }
-  ];
-  
-  return {
-    dailySubmissions,
-    weeklyTrend,
-    monthlyBreakdown,
-    performanceMetrics: {
-      avgDaily,
-      peakDay: {
-        date: new Date(peakDay.date).toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric' 
-        }),
-        count: peakDay.count
-      },
-      consistency,
-      totalSubmitted
-    },
-    categoryDistribution
-  };
-};
-
 const TaskManagement = ({ employee }: TaskManagementProps) => {
-  const [tasks, setTasks] = useState<Task[]>(demoTasks);
+  // API Hooks
+  const { data: tasks = [], isLoading, refetch } = useEmployeeTasks(employee.id || 0);
+  const submitMutation = useSubmitTaskProgress();
+
+  // State
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showTaskDetails, setShowTaskDetails] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -242,16 +104,19 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
   });
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [analyticsView, setAnalyticsView] = useState<'daily' | 'weekly' | 'distribution'>('daily');
+
   // Calculate statistics
   const totalTasks = tasks.length;
-  const activeTasks = tasks.filter(t => t.status === 'active').length;
-  const completedTasks = tasks.filter(t => t.status === 'completed').length;
-  const overallProgress = tasks.reduce((acc, task) => {
-    return acc + (task.achieved / task.target) * 100;
-  }, 0) / tasks.length;
+  const activeTasks = tasks.filter((t: Task) => t.status === 'active').length;
+  const completedTasks = tasks.filter((t: Task) => t.status === 'completed').length;
+  const overallProgress = tasks.length > 0 
+    ? tasks.reduce((acc: number, task: Task) => {
+        return acc + (task.achieved / task.target) * 100;
+      }, 0) / tasks.length 
+    : 0;
 
   // Filter tasks
-  const filteredTasks = tasks.filter(task => {
+  const filteredTasks = tasks.filter((task: Task) => {
     const matchesType = filterType === 'all' || task.type === filterType;
     const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
     const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -259,7 +124,7 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
     return matchesType && matchesStatus && matchesSearch;
   });
 
-  // Get task icon
+  // Helper functions
   const getTaskIcon = (category: string) => {
     switch (category) {
       case 'applications': return Briefcase;
@@ -269,7 +134,6 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
     }
   };
 
-  // Get priority color
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high': return 'bg-red-100 text-red-700 border-red-200';
@@ -279,7 +143,6 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
     }
   };
 
-  // Get status color
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return 'bg-green-100 text-green-700';
@@ -289,7 +152,6 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
     }
   };
 
-  // Get category color
   const getCategoryColor = (category: string) => {
     switch (category) {
       case 'applications': return 'from-blue-500 to-blue-600';
@@ -299,12 +161,10 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
     }
   };
 
-  // Calculate progress percentage
   const getProgressPercentage = (task: Task) => {
     return Math.min((task.achieved / task.target) * 100, 100);
   };
 
-  // Format date
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', {
@@ -314,7 +174,6 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
     });
   };
 
-  // Get days remaining
   const getDaysRemaining = (deadline: string) => {
     const today = new Date();
     const end = new Date(deadline);
@@ -323,48 +182,121 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
   };
 
   // Handle task submission
-  const handleSubmitProgress = () => {
+  const handleSubmitProgress = async () => {
     if (!selectedTask || submissionForm.count <= 0) {
       alert('Please enter a valid count');
       return;
     }
 
-    const updatedTasks = tasks.map(task => {
-      if (task.id === selectedTask.id) {
-        const newAchieved = Math.min(task.achieved + submissionForm.count, task.target);
-        const newStatus = newAchieved >= task.target ? 'completed' : task.status;
-        return {
-          ...task,
-          achieved: newAchieved,
-          status: newStatus as 'active' | 'completed' | 'overdue'
-        };
-      }
-      return task;
-    });
+    if (!employee.id) {
+      alert('Employee ID not found');
+      return;
+    }
 
-    setTasks(updatedTasks);
-    setShowSubmitModal(false);
-    setSubmissionForm({ count: 0, notes: '' });
-    setSelectedTask(null);
+    try {
+      await submitMutation.mutateAsync({
+        taskId: selectedTask.id,
+        data: {
+          employeeId: employee.id,
+          count: submissionForm.count,
+          notes: submissionForm.notes
+        }
+      });
+
+      // Success
+      setShowSubmitModal(false);
+      setSubmissionForm({ count: 0, notes: '' });
+      setSelectedTask(null);
+      refetch(); // Refresh tasks
+      
+      alert('Progress submitted successfully!');
+    } catch (error: any) {
+      console.error('Error submitting progress:', error);
+      alert(error.response?.data?.message || 'Failed to submit progress');
+    }
   };
 
-  // Open submit modal
+  // Open modals
   const openSubmitModal = (task: Task) => {
     setSelectedTask(task);
     setShowSubmitModal(true);
   };
 
-  // Open task details
   const openTaskDetails = (task: Task) => {
     setSelectedTask(task);
     setShowTaskDetails(true);
     
     // Generate analytics for weekly/monthly tasks
     if (task.type === 'weekly' || task.type === 'monthly') {
-      const analytics = generateDemoAnalytics(task.type, task.target);
-      setAnalyticsData(analytics);
-      setAnalyticsView('daily');
+      generateAnalytics(task);
     }
+  };
+
+  // Generate demo analytics (you can replace with API call later)
+  const generateAnalytics = (task: Task) => {
+    const today = new Date();
+    const days = task.type === 'weekly' ? 7 : 30;
+    
+    const dailySubmissions: DailySubmission[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dayGoal = Math.floor(task.target / days);
+      const randomCount = Math.floor(dayGoal * (0.5 + Math.random() * 0.8));
+      const efficiency = (randomCount / dayGoal) * 100;
+      
+      dailySubmissions.push({
+        date: date.toISOString().split('T')[0],
+        count: randomCount,
+        goal: dayGoal,
+        efficiency: Math.min(efficiency, 100),
+        dayOfWeek: date.toLocaleDateString('en-US', { weekday: 'short' })
+      });
+    }
+    
+    const weeklyTrend = [];
+    for (let i = 3; i >= 0; i--) {
+      weeklyTrend.push({
+        week: `Week ${4 - i}`,
+        target: task.target,
+        achieved: Math.floor(task.target * (0.6 + Math.random() * 0.4))
+      });
+    }
+    
+    const totalSubmitted = dailySubmissions.reduce((sum, day) => sum + day.count, 0);
+    const avgDaily = totalSubmitted / days;
+    const peakDay = dailySubmissions.reduce((max, day) => 
+      day.count > max.count ? day : max, dailySubmissions[0]
+    );
+    const consistency = (dailySubmissions.filter(d => d.efficiency >= 80).length / days) * 100;
+    
+    setAnalyticsData({
+      dailySubmissions,
+      weeklyTrend,
+      monthlyBreakdown: [
+        { month: 'Applications', value: 65 },
+        { month: 'Interviews', value: 20 },
+        { month: 'Assessments', value: 15 }
+      ],
+      performanceMetrics: {
+        avgDaily,
+        peakDay: {
+          date: new Date(peakDay.date).toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+          }),
+          count: peakDay.count
+        },
+        consistency,
+        totalSubmitted
+      },
+      categoryDistribution: [
+        { name: 'LinkedIn', value: 40, color: '#0077B5' },
+        { name: 'Naukri', value: 30, color: '#4CAF50' },
+        { name: 'Indeed', value: 20, color: '#2196F3' },
+        { name: 'Other', value: 10, color: '#9C27B0' }
+      ]
+    });
   };
 
   // Animation variants
@@ -381,7 +313,7 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
     visible: { y: 0, opacity: 1 }
   };
 
-    const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-white p-4 rounded-xl shadow-lg border border-gray-200">
@@ -397,8 +329,7 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
     return null;
   };
 
-
-    const AnalyticsSection = () => {
+  const AnalyticsSection = () => {
     if (!selectedTask || !analyticsData) return null;
 
     return (
@@ -804,6 +735,15 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
     );
   };
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#6B8DA2]"></div>
+      </div>
+    );
+  }
+
   return (
     <motion.div
       initial="hidden"
@@ -960,7 +900,7 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
       >
         <AnimatePresence>
-          {filteredTasks.map((task, index) => {
+          {filteredTasks.map((task: Task, index: number) => {
             const Icon = getTaskIcon(task.category);
             const progress = getProgressPercentage(task);
             const daysLeft = getDaysRemaining(task.deadline);
@@ -1072,9 +1012,10 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
                         whileTap={{ scale: 0.95 }}
                         onClick={() => openSubmitModal(task)}
                         className="flex-1 px-4 py-2 bg-gradient-to-r from-[#6B8DA2] to-[#7A9DB2] text-white rounded-lg font-medium hover:shadow-lg transition cursor-pointer flex items-center justify-center gap-2"
+                        disabled={submitMutation.isPending}
                       >
                         <Plus className="w-4 h-4" />
-                        Submit
+                        {submitMutation.isPending ? 'Submitting...' : 'Submit'}
                       </motion.button>
                     )}
                   </div>
@@ -1180,9 +1121,10 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={handleSubmitProgress}
-                    className="flex-1 px-6 py-3 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-xl font-semibold hover:shadow-lg transition cursor-pointer"
+                    disabled={submitMutation.isPending}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-xl font-semibold hover:shadow-lg transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Submit Progress
+                    {submitMutation.isPending ? 'Submitting...' : 'Submit Progress'}
                   </motion.button>
                   <button
                     onClick={() => {
@@ -1201,7 +1143,7 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
       </AnimatePresence>
 
       {/* Task Details Modal */}
-     <AnimatePresence>
+      <AnimatePresence>
         {showTaskDetails && selectedTask && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <motion.div
@@ -1365,8 +1307,9 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
           </div>
         )}
       </AnimatePresence>
+
       {/* Empty State */}
-      {filteredTasks.length === 0 && (
+      {filteredTasks.length === 0 && !isLoading && (
         <motion.div
           variants={itemVariants}
           className="bg-white rounded-xl p-12 text-center border border-gray-100"
@@ -1376,26 +1319,30 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
           </div>
           <h3 className="text-xl font-bold text-gray-800 mb-2">No Tasks Found</h3>
           <p className="text-gray-500 mb-6">
-            No tasks match your current filters. Try adjusting your search criteria.
+            {searchTerm || filterType !== 'all' || filterStatus !== 'all' 
+              ? 'No tasks match your current filters. Try adjusting your search criteria.'
+              : 'You don\'t have any tasks assigned yet. Check back later!'}
           </p>
-          <div className="flex items-center justify-center gap-3">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => {
-                setFilterType('all');
-                setFilterStatus('all');
-                setSearchTerm('');
-              }}
-              className="px-6 py-2 bg-gradient-to-r from-[#6B8DA2] to-[#7A9DB2] text-white rounded-xl font-medium hover:shadow-lg transition cursor-pointer"
-            >
-              Clear Filters
-            </motion.button>
-          </div>
+          {(searchTerm || filterType !== 'all' || filterStatus !== 'all') && (
+            <div className="flex items-center justify-center gap-3">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => {
+                  setFilterType('all');
+                  setFilterStatus('all');
+                  setSearchTerm('');
+                }}
+                className="px-6 py-2 bg-gradient-to-r from-[#6B8DA2] to-[#7A9DB2] text-white rounded-xl font-medium hover:shadow-lg transition cursor-pointer"
+              >
+                Clear Filters
+              </motion.button>
+            </div>
+          )}
         </motion.div>
       )}
     </motion.div>
   );
 };
 
-export default TaskManagement
+export default TaskManagement;

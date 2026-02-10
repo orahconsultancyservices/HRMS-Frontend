@@ -1,4 +1,4 @@
-// src/services/api.ts
+// src/services/api.ts - UPDATED VERSION
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -40,12 +40,12 @@ api.interceptors.response.use(
 
 // Auth API calls
 export const authApi = {
-    login: async (data: { email: string; password: string }) => {
+  login: async (data: { email: string; password: string }) => {
     console.log('📤 Sending login request:', data.email);
     try {
       const response = await api.post('/auth/login', data);
       console.log('📥 Login response received:', response.data);
-      return response.data; // Return data directly
+      return response.data;
     } catch (error) {
       console.error('❌ Login request failed:', error);
       throw error;
@@ -81,44 +81,74 @@ export const employeeApi = {
 
 // Leave API calls
 export const leaveApi = {
-  getAll: () => api.get('/leaves'),
+  getAll: async () => {
+    try {
+      const response = await api.get('/leaves');
+      console.log('📥 Leave API getAll response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Leave API getAll error:', error.response?.data || error);
+      throw error;
+    }
+  },
   getById: (id: number) => api.get(`/leaves/${id}`),
   getByEmployee: (empId: number) => api.get(`/leaves/employee/${empId}`),
-  create: (data: any) => api.post('/leaves', data),
+  create: async (data: any) => {
+    try {
+      console.log('📤 Creating leave:', data);
+      const response = await api.post('/leaves', data);
+      console.log('✅ Leave created:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Create leave error:', error.response?.data || error);
+      throw error;
+    }
+  },
   update: (id: number, data: any) => api.put(`/leaves/${id}`, data),
-  updateStatus: (id: number, status: string) => api.patch(`/leaves/${id}/status`, { status }),
-  delete: (id: number) => api.delete(`/leaves/${id}`),
+  updateStatus: async (id: number, status: string, notes?: string) => {
+    try {
+      console.log('📤 Updating leave status:', { id, status, notes });
+      const response = await api.patch(`/leaves/${id}/status`, { 
+        status,
+        managerNotes: notes 
+      });
+      console.log('✅ Status updated:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Update status error:', error.response?.data || error);
+      throw error;
+    }
+  },
+  delete: async (id: number) => {
+    try {
+      console.log('📤 Deleting leave:', id);
+      const response = await api.delete(`/leaves/${id}`);
+      console.log('✅ Leave deleted:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Delete leave error:', error.response?.data || error);
+      throw error;
+    }
+  },
   getStatistics: () => api.get('/leaves/statistics'),
-   getPaidLeaveBalance: async (empId: number) => {
+  getPaidLeaveBalance: async (empId: number) => {
     try {
       console.log('📤 API: Requesting paid leave balance for employee ID:', empId);
-      
       const response = await api.get(`/leaves/employee/${empId}/paid-balance`, {
-        params: {
-          _t: Date.now() // Cache busting
-        },
+        params: { _t: Date.now() },
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
           'Expires': '0'
         }
       });
-      
       console.log('📥 API: Paid leave balance response:', response.data);
-      
-      // Return the response data directly
       return response.data;
     } catch (error: any) {
       console.error('❌ API: Error fetching paid leave balance:', error.response?.data || error);
-      
-      // Return a default response instead of throwing
       return {
         success: false,
-        data: {
-          earned: 0,
-          consumed: 0,
-          available: 0
-        }
+        data: { earned: 0, consumed: 0, available: 0 }
       };
     }
   },
@@ -141,7 +171,7 @@ export const attendanceApi = {
         status: response.status,
         data: response.data
       });
-      return response.data; // Return the full response data
+      return response.data;
     } catch (error: any) {
       console.error('❌ Attendance API getAll error:', error.response?.data || error);
       throw error;
@@ -156,15 +186,13 @@ export const attendanceApi = {
     try {
       const response = await api.post(`/attendance/employee/${employeeId}/clock-in`, data);
       console.log('✅ Clock in API response:', response.data);
-      // Return the full response data which contains { success, message, data }
       return response.data;
     } catch (error: any) {
       console.error('❌ Clock in API error:', error.response?.data || error);
       throw error;
     }
   },
-
- clockOut: async (employeeId: number, data?: any) => {
+  clockOut: async (employeeId: number, data?: any) => {
     try {
       const response = await api.post(`/attendance/employee/${employeeId}/clock-out`, data);
       console.log('✅ Clock out API response:', response.data);
@@ -174,7 +202,6 @@ export const attendanceApi = {
       throw error;
     }
   },
-
   startBreak: async (employeeId: number, data?: any) => {
     try {
       const response = await api.post(`/attendance/employee/${employeeId}/break/start`, data);
@@ -185,8 +212,6 @@ export const attendanceApi = {
       throw error;
     }
   },
-
-
   endBreak: async (employeeId: number, breakId: number) => {
     try {
       const response = await api.post(`/attendance/employee/${employeeId}/break/${breakId}/end`);
@@ -197,13 +222,10 @@ export const attendanceApi = {
       throw error;
     }
   },
-
- getBreaks: async (employeeId: number) => {
+  getBreaks: async (employeeId: number) => {
     try {
       const response = await api.get(`/attendance/employee/${employeeId}/breaks`, {
-        params: {
-          _t: Date.now()
-        },
+        params: { _t: Date.now() },
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -217,14 +239,10 @@ export const attendanceApi = {
       return { success: false, data: [] };
     }
   },
-
-
- getTodayStatus: async (employeeId: number) => {
+  getTodayStatus: async (employeeId: number) => {
     try {
       const response = await api.get(`/attendance/employee/${employeeId}/today`, {
-        params: {
-          _t: Date.now() // Cache-busting timestamp
-        },
+        params: { _t: Date.now() },
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -235,32 +253,62 @@ export const attendanceApi = {
       return response.data;
     } catch (error: any) {
       console.error('❌ Get today status API error:', error.response?.data || error);
-      // ✅ FIX: Return null response instead of throwing
       return { success: false, data: null };
     }
   },
-
   getByEmployee: async (employeeId: number, params?: any) => {
     try {
       const response = await api.get(`/attendance/employee/${employeeId}`, { 
         params: {
           ...params,
-          _t: Date.now() // Cache busting
+          _t: Date.now()
         }
       });
-      
       console.log('📅 Monthly attendance API response:', {
         status: response.status,
         data: response.data
       });
-      
-      // Return the full response data
       return response.data;
     } catch (error: any) {
       console.error('❌ Monthly attendance API error:', error.response?.data || error);
       throw error;
     }
   },
+  updateAttendance: async (id: number, data: {
+    checkIn?: string;
+    checkOut?: string;
+    notes?: string;
+    status?: string;
+  }) => {
+    try {
+      console.log('📤 Updating attendance:', { id, data });
+      const response = await api.put(`/attendance/${id}`, data);
+      console.log('✅ Attendance updated:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Update attendance error:', error.response?.data || error);
+      throw error;
+    }
+  },
+
+  exportMonthlyAll: async (params: {
+    month: number;
+    year: number;
+    department?: string;
+  }) => {
+    try {
+      console.log('📤 Exporting monthly attendance for all employees:', params);
+      const response = await api.get('/attendance/export/monthly', {
+        params,
+        responseType: 'blob'
+      });
+      console.log('✅ Export successful');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Export error:', error.response?.data || error);
+      throw error;
+    }
+  }
 };
 
 export default api;
