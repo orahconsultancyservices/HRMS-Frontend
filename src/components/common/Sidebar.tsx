@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Clock, Gift, LogOut, Home,
-  FileText, ChevronRight, BookCheck, Target
+  FileText, ChevronRight, BookCheck, Target, Shield
 } from 'lucide-react';
 import { useCurrentUser, useLogout } from '../../hooks/useAuth';
 import logo from '../../assets/logo.png';
@@ -24,6 +24,14 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
     { id: 'birthdays', icon: Gift, label: 'Birthdays' },
   ];
 
+  const teamLeadTabs = [
+    { id: 'dashboard', icon: Home, label: 'Dashboard' },
+    { id: 'tasks', icon: Shield, label: 'Team Tasks' },
+    { id: 'my-leaves', icon: FileText, label: 'My Leaves' },
+    { id: 'my-attendance', icon: Clock, label: 'My Attendance' },
+    { id: 'birthdays', icon: Gift, label: 'Birthdays' },
+  ];
+
   const employeeTabs = [
     { id: 'dashboard', icon: Home, label: 'Dashboard' },
     { id: 'my-leaves', icon: FileText, label: 'My Leaves' },
@@ -32,19 +40,36 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
     { id: 'birthdays', icon: Gift, label: 'Birthdays' },
   ];
 
-  const tabs = user?.role === 'employer' ? employerTabs : employeeTabs;
+  const tabs =
+    user?.role === 'employer' ? employerTabs :
+    user?.role === 'teamlead' ? teamLeadTabs :
+    employeeTabs;
+
+  // Role label shown in the profile badge
+  const roleLabel =
+    user?.role === 'teamlead' ? 'Team Lead' : user?.role;
+
+  // Active tab highlight colour — teal for TL, original blue for others
+  const activeColor =
+    user?.role === 'teamlead'
+      ? 'from-teal-600 to-teal-500'
+      : 'from-[#6B8DA2] to-[#6B8DA2]';
+
+  // Hover colour on active tab — teal for TL, amber for others
+  const activeHoverBg =
+    user?.role === 'teamlead'
+      ? 'rgba(20, 184, 166, 0.9)'
+      : 'rgba(245, 164, 44, 0.9)';
 
   const handleLogout = async () => {
     try {
       await logoutMutation.mutateAsync();
-      // After logout, force a reload to go back to login page
       window.location.reload();
     } catch (error) {
       console.error('Logout failed:', error);
     }
   };
 
-  // Show loading state
   if (isLoading || !user) {
     return (
       <motion.div
@@ -79,12 +104,23 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
           <img src={logo} alt="Logo" className='w-full h-full object-contain' />
         </motion.div>
         <div className="flex flex-col">
-          <span className="text-white font-bold text-2xl tracking-tight">
-            OCS
-          </span>
+          <span className="text-white font-bold text-2xl tracking-tight">OCS</span>
           <span className="text-xs text-gray-400 font-medium">HR Management</span>
         </div>
       </motion.div>
+
+      {/* Team Lead access badge */}
+      {user.role === 'teamlead' && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="flex items-center gap-2 mx-2 mb-4 px-3 py-2 rounded-lg bg-teal-500/15 border border-teal-500/25"
+        >
+          <Shield className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+          <span className="text-teal-300 text-xs font-semibold">Team Lead Access</span>
+        </motion.div>
+      )}
 
       {/* Navigation Tabs */}
       <nav className="flex-1 space-y-1">
@@ -99,21 +135,19 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
                 transition={{ delay: index * 0.05 }}
                 whileHover={{
                   x: 5,
-                  backgroundColor: isActive ? 'rgba(245, 164, 44, 0.9)' : 'rgba(107, 141, 162, 0.2)'
+                  backgroundColor: isActive ? activeHoverBg : 'rgba(107, 141, 162, 0.2)'
                 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative w-full cursor-pointer flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${isActive
-                    ? 'bg-gradient-to-r from-[#6B8DA2] to-[#6B8DA2] text-white shadow-lg'
+                className={`relative w-full cursor-pointer flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
+                  isActive
+                    ? `bg-gradient-to-r ${activeColor} text-white shadow-lg`
                     : 'text-gray-400 hover:text-white'
-                  }`}
+                }`}
               >
                 {/* Icon with animation */}
                 <motion.div
-                  animate={{
-                    scale: isActive ? 1.1 : 1,
-                    rotate: isActive ? 0 : 0
-                  }}
+                  animate={{ scale: isActive ? 1.1 : 1 }}
                   transition={{ type: "spring", stiffness: 300 }}
                 >
                   <tab.icon className="w-5 h-5" />
@@ -162,9 +196,13 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
             <p className="text-white text-sm font-medium truncate">{user.name}</p>
             <motion.p
               whileHover={{ x: 2 }}
-              className="text-gray-400 text-xs capitalize bg-gray-800/50 px-2 py-1 rounded inline-block"
+              className={`text-xs capitalize px-2 py-1 rounded inline-block ${
+                user.role === 'teamlead'
+                  ? 'text-teal-300 bg-teal-900/40'
+                  : 'text-gray-400 bg-gray-800/50'
+              }`}
             >
-              {user.role}
+              {roleLabel}
             </motion.p>
           </div>
         </motion.div>

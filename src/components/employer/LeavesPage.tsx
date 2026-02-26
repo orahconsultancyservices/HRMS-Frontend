@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import {
@@ -13,7 +13,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { useLeaves, useUpdateLeaveStatus } from '../../hooks/useLeaves';
 import { useEmployees } from '../../hooks/useEmployees';
-import { useQueryClient } from '@tanstack/react-query';
+// import { useQueryClient } from '@tanstack/react-query';
 
 // Define types
 interface Employee {
@@ -55,6 +55,19 @@ interface LeaveRequest {
   contactDuringLeave?: string;
   addressDuringLeave?: string;
   managerNotes?: string;
+  isHalfDay?: boolean;
+  isPaid?: boolean;
+  paidDays?: number;
+  employee?: {
+    id: number;
+    firstName: string;
+    lastName: string;
+    department: string;
+    email: string;
+    phone?: string;
+    position?: string;
+    joinDate?: string;
+  };
 }
 
 interface LeavesPageProps {
@@ -82,10 +95,7 @@ const DEFAULT_LEAVE_TYPES: LeaveType[] = [
 
 const LeavesPage = ({
   leaveTypes = DEFAULT_LEAVE_TYPES,
-  setLeaveTypes
 }: LeavesPageProps) => {
-  const queryClient = useQueryClient();
-  
   // React Query hooks
   const { data: leavesData, isLoading: isLoadingLeaves } = useLeaves();
   const { data: employeesData, isLoading: isLoadingEmployees } = useEmployees();
@@ -104,20 +114,20 @@ const LeavesPage = ({
 
   const [startDate, endDate] = filters.dateRange;
 
-  // Process data from API
-  const leaveRequests = React.useMemo(() => {
+  // Process data from API with proper typing
+  const leaveRequests: LeaveRequest[] = React.useMemo(() => {
     if (!leavesData) return [];
     
     console.log('📊 Processing leavesData:', leavesData);
     
     // If leavesData is already an array, use it directly
     if (Array.isArray(leavesData)) {
-      return leavesData;
+      return leavesData as LeaveRequest[];
     }
     
     // If leavesData has a data property that's an array
-    if (leavesData && leavesData.data && Array.isArray(leavesData.data)) {
-      return leavesData.data.map((leave: any) => ({
+    if (leavesData && typeof leavesData === 'object' && 'data' in leavesData && Array.isArray((leavesData as any).data)) {
+      return (leavesData as any).data.map((leave: any) => ({
         id: leave.id,
         empId: leave.empId,
         employeeId: leave.employee?.id || leave.empId,
@@ -137,29 +147,60 @@ const LeavesPage = ({
         department: leave.employee?.department,
         empName: leave.employee ? 
           `${leave.employee.firstName} ${leave.employee.lastName}` : 
-          `Employee ${leave.empId}`
+          `Employee ${leave.empId}`,
+        employee: leave.employee
       }));
+    }
+    
+    // If leavesData has success property
+    if (leavesData && typeof leavesData === 'object' && 'success' in leavesData && (leavesData as any).success && (leavesData as any).data) {
+      const data = (leavesData as any).data;
+      if (Array.isArray(data)) {
+        return data.map((leave: any) => ({
+          id: leave.id,
+          empId: leave.empId,
+          employeeId: leave.employee?.id || leave.empId,
+          type: leave.type,
+          from: leave.from,
+          to: leave.to,
+          days: leave.days,
+          reason: leave.reason,
+          status: leave.status,
+          appliedDate: leave.appliedDate,
+          contactDuringLeave: leave.contactDuringLeave,
+          addressDuringLeave: leave.addressDuringLeave,
+          managerNotes: leave.managerNotes,
+          isHalfDay: leave.isHalfDay || false,
+          isPaid: leave.isPaid || false,
+          paidDays: leave.paidDays || 0,
+          department: leave.employee?.department,
+          empName: leave.employee ? 
+            `${leave.employee.firstName} ${leave.employee.lastName}` : 
+            `Employee ${leave.empId}`,
+          employee: leave.employee
+        }));
+      }
     }
     
     console.warn('⚠️ Unexpected leaves data format:', leavesData);
     return [];
   }, [leavesData]);
 
-  const employees = React.useMemo(() => {
+  const employees: Employee[] = React.useMemo(() => {
     if (!employeesData) return [];
     
     console.log('👥 Processing employeesData:', employeesData);
     
     if (Array.isArray(employeesData)) {
-      return employeesData;
+      return employeesData as Employee[];
     }
     
     if (employeesData && typeof employeesData === 'object') {
-      if (Array.isArray(employeesData.data)) {
-        return employeesData.data;
+      if ('data' in employeesData && Array.isArray((employeesData as any).data)) {
+        return (employeesData as any).data as Employee[];
       }
-      if (employeesData.success && Array.isArray(employeesData.data)) {
-        return employeesData.data;
+      if ('success' in employeesData && (employeesData as any).success && Array.isArray((employeesData as any).data)) {
+        return (employeesData as any).data as Employee[];
       }
     }
     
@@ -170,36 +211,17 @@ const LeavesPage = ({
   // Get active leave types
   const activeLeaveTypes = leaveTypes.filter(lt => lt.isActive);
 
-  useEffect(() => {
-    console.log('📊 Leaves Page Data Debug:', {
-      leavesData,
-      employeesData,
-      leaveRequestsCount: leaveRequests.length,
-      employeesCount: employees.length
-    });
-    
-    // Log first few items to verify structure
-    if (leaveRequests.length > 0) {
-      console.log('📋 First leave request:', leaveRequests[0]);
-      console.log('🔑 Keys:', Object.keys(leaveRequests[0]));
-    }
-    
-    if (employees.length > 0) {
-      console.log('👤 First employee:', employees[0]);
-    }
-  }, [leavesData, employeesData, leaveRequests, employees]);
-
-  // Filter leave requests
-  const filteredLeaves = leaveRequests.filter(leave => {
+  // Filter leave requests with proper typing
+  const filteredLeaves = leaveRequests.filter((leave: LeaveRequest) => {
     const matchesStatus = filters.status === 'all' || leave.status === filters.status;
     const matchesType = filters.type === 'all' || leave.type === filters.type;
     
     // Get employee details - try multiple approaches
-    let employee;
+    let employee: Employee | undefined;
     if (leave.employeeId) {
-      employee = employees.find(e => e.id === leave.employeeId);
+      employee = employees.find((e: Employee) => e.id === leave.employeeId);
     } else if (leave.empId) {
-      employee = employees.find(e => e.id === leave.empId);
+      employee = employees.find((e: Employee) => e.id === leave.empId);
     }
     
     // Use leave.department if available, otherwise employee department
@@ -220,17 +242,17 @@ const LeavesPage = ({
   });
 
   // Calculate statistics
-  const pendingCount = leaveRequests.filter(l => l.status === 'pending').length;
-  const approvedCount = leaveRequests.filter(l => l.status === 'approved').length;
-  const rejectedCount = leaveRequests.filter(l => l.status === 'rejected').length;
+  const pendingCount = leaveRequests.filter((l: LeaveRequest) => l.status === 'pending').length;
+  const approvedCount = leaveRequests.filter((l: LeaveRequest) => l.status === 'approved').length;
+  const rejectedCount = leaveRequests.filter((l: LeaveRequest) => l.status === 'rejected').length;
   const totalLeaveDays = leaveRequests
-    .filter(l => l.status === 'approved')
-    .reduce((acc, curr) => acc + (curr.days || 0), 0);
+    .filter((l: LeaveRequest) => l.status === 'approved')
+    .reduce((acc: number, curr: LeaveRequest) => acc + (curr.days || 0), 0);
 
   // Get unique departments from employees
   const departments = Array.from(new Set(employees
-    .filter(e => e.department)
-    .map(e => e.department))) as string[];
+    .filter((e: Employee) => e.department)
+    .map((e: Employee) => e.department))) as string[];
 
   // Handle leave actions with API
   const handleAction = (id: number, status: 'approved' | 'rejected', notes?: string) => {
@@ -261,25 +283,35 @@ const LeavesPage = ({
     setShowDetailsModal(true);
   };
 
-  const getEmployeeDetails = (empId: number) => {
+  const getEmployeeDetails = (empId: number): Employee | undefined => {
     // First try to find by id
-    let employee = employees.find(e => e.id === empId);
+    let employee = employees.find((e: Employee) => e.id === empId);
     
     // If not found, check if there's an employee object in the leave itself
     if (!employee) {
-      const leave = leaveRequests.find(l => l.empId === empId);
+      const leave = leaveRequests.find((l: LeaveRequest) => l.empId === empId);
       if (leave && leave.employee) {
-        return leave.employee;
+        return {
+          id: leave.employee.id,
+          firstName: leave.employee.firstName,
+          lastName: leave.employee.lastName,
+          employeeId: empId.toString(),
+          email: leave.employee.email || '',
+          department: leave.employee.department || '',
+          position: leave.employee.position || '',
+          joinDate: leave.employee.joinDate || '',
+          phone: leave.employee.phone
+        };
       }
     }
     
     return employee;
   };
 
-  const getLeaveTypeColor = (typeName: string) => {
-    const leaveType = activeLeaveTypes.find(lt => lt.name === typeName);
+  const getLeaveTypeColor = (typeName: string): string | React.CSSProperties => {
+    const leaveType = activeLeaveTypes.find((lt: LeaveType) => lt.name === typeName);
     if (leaveType && leaveType.color) {
-      // Use inline style for dynamic colors
+      // Return style object for dynamic colors
       return {
         backgroundColor: `${leaveType.color}20`,
         color: leaveType.color,
@@ -287,7 +319,7 @@ const LeavesPage = ({
       };
     }
 
-    // Fallback colors
+    // Fallback class names
     switch (typeName) {
       case 'Paid': return 'bg-green-100 text-green-700 border-green-200';
       case 'Unpaid': return 'bg-red-100 text-red-700 border-red-200';
@@ -299,7 +331,7 @@ const LeavesPage = ({
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string): string => {
     switch (status) {
       case 'approved': return 'bg-green-100 text-green-700 border-green-200';
       case 'rejected': return 'bg-red-100 text-red-700 border-red-200';
@@ -456,7 +488,7 @@ const LeavesPage = ({
                 type="text"
                 placeholder="Search by employee name, reason, or leave type..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-[#6B8DA2] focus:ring-2 focus:ring-[#6B8DA2]/20"
               />
             </div>
@@ -467,7 +499,7 @@ const LeavesPage = ({
               <Filter className="w-5 h-5 text-gray-600" />
               <select
                 value={filters.status}
-                onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters({ ...filters, status: e.target.value as any })}
                 className="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#6B8DA2] bg-white"
               >
                 <option value="all">All Status</option>
@@ -479,22 +511,22 @@ const LeavesPage = ({
 
             <select
               value={filters.type}
-              onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters({ ...filters, type: e.target.value })}
               className="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#6B8DA2] bg-white"
             >
               <option value="all">All Types</option>
-              {activeLeaveTypes.map(type => (
+              {activeLeaveTypes.map((type: LeaveType) => (
                 <option key={type.id} value={type.name}>{type.name}</option>
               ))}
             </select>
 
             <select
               value={filters.department}
-              onChange={(e) => setFilters({ ...filters, department: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilters({ ...filters, department: e.target.value })}
               className="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-[#6B8DA2] bg-white"
             >
               <option value="all">All Departments</option>
-              {departments.map(dept => (
+              {departments.map((dept: string) => (
                 <option key={dept} value={dept}>{dept}</option>
               ))}
             </select>
@@ -560,7 +592,7 @@ const LeavesPage = ({
                     </td>
                   </tr>
                 ) : (
-                  filteredLeaves.map((leave, index) => {
+                  filteredLeaves.map((leave: LeaveRequest, index: number) => {
                     const employee = getEmployeeDetails(leave.empId);
                     const StatusIcon = getStatusIcon(leave.status);
                     const isExpanded = expandedRows.has(leave.id);

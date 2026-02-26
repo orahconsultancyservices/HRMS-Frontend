@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { demoEmployees } from '../../data/demoData';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import { Calendar, FileText, Check, X, Eye, Trash2, Clock, AlertCircle, Sparkles } from 'lucide-react';
@@ -31,18 +30,6 @@ interface Employee {
   id?: number;
 }
 
-interface LeaveBalance {
-  casual: number;
-  sick: number;
-  earned: number;
-}
-
-interface DemoEmployee {
-  id: string;
-  name: string;
-  leaveBalance: LeaveBalance;
-}
-
 interface MyLeavesProps {
   employee: Employee;
   leaveRequests: LeaveRequest[];
@@ -58,7 +45,7 @@ interface FormState {
   leaveDuration: 'fullDay' | 'halfDay';
 }
 
-const MyLeavesPage = ({ employee, leaveRequests, setLeaveRequests }: MyLeavesProps) => {
+const MyLeavesPage = ({ employee, leaveRequests }: MyLeavesProps) => {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<FormState>({
@@ -73,7 +60,7 @@ const MyLeavesPage = ({ employee, leaveRequests, setLeaveRequests }: MyLeavesPro
   const [showLeaveDetails, setShowLeaveDetails] = useState(false);
 
   // Fetch leaves with proper refetch intervals
-  const { data: leavesData, isLoading: isLoadingLeaves, refetch } = useQuery({
+  const { data: leavesData, isLoading: isLoadingLeaves } = useQuery({
     queryKey: ['leaves', employee.empId],
     queryFn: async () => {
       try {
@@ -121,7 +108,7 @@ const MyLeavesPage = ({ employee, leaveRequests, setLeaveRequests }: MyLeavesPro
     return leaveRequests.filter(l => l.empId === employee.empId);
   }, [leavesData, leaveRequests, employee.empId]);
 
-  const emp = demoEmployees.find((e: any) => e.id === employee.empId) as DemoEmployee | undefined;
+  // const emp = demoEmployees.find((e: any) => e.id === employee.empId) as DemoEmployee | undefined;
 
   const getNumericEmployeeId = async () => {
     if (employee.id && !isNaN(employee.id)) return employee.id;
@@ -237,7 +224,7 @@ const MyLeavesPage = ({ employee, leaveRequests, setLeaveRequests }: MyLeavesPro
     return `${fromDate} to ${toDate}`;
   };
 
-  const calculateExactDays = (from: string, to: string, isHalfDay: boolean) => {
+  const calculateExactDays = (from: string, to: string, isHalfDay: boolean = false) => {
     if (isHalfDay) return 0.5;
 
     const fromDate = new Date(from);
@@ -339,7 +326,7 @@ const MyLeavesPage = ({ employee, leaveRequests, setLeaveRequests }: MyLeavesPro
     exit: { opacity: 0, scale: 0.9 }
   };
 
-  // FIXED: Paid Leave Card with proper balance calculation
+  // FIXED: Paid Leave Card with proper balance calculation and proper typing
   const PaidLeaveCard = () => {
     const [paidLeaveBalance, setPaidLeaveBalance] = React.useState({
       earned: 0,
@@ -404,16 +391,16 @@ const MyLeavesPage = ({ employee, leaveRequests, setLeaveRequests }: MyLeavesPro
               console.warn('⚠️ Invalid response format:', response);
             }
 
-            // FIXED: Calculate applied paid leaves correctly
-            // Only approved leaves reduce the balance
-            // Pending leaves show in UI but don't affect balance until approved
-            const paidLeaves = myLeaves.filter(leave => leave.isPaid && leave.paidDays > 0);
+            // FIXED: Calculate applied paid leaves correctly with proper typing
+            const paidLeaves = myLeaves.filter((leave: LeaveRequest) => leave.isPaid && leave.paidDays && leave.paidDays > 0);
+            
             const pending = paidLeaves
-              .filter(l => l.status === 'pending')
-              .reduce((sum, l) => sum + (l.paidDays || 0), 0);
+              .filter((l: LeaveRequest) => l.status === 'pending')
+              .reduce((sum: number, l: LeaveRequest) => sum + (l.paidDays || 0), 0);
+            
             const approved = paidLeaves
-              .filter(l => l.status === 'approved')
-              .reduce((sum, l) => sum + (l.paidDays || 0), 0);
+              .filter((l: LeaveRequest) => l.status === 'approved')
+              .reduce((sum: number, l: LeaveRequest) => sum + (l.paidDays || 0), 0);
 
             setAppliedLeaves({
               pending,
@@ -538,7 +525,7 @@ const MyLeavesPage = ({ employee, leaveRequests, setLeaveRequests }: MyLeavesPro
     );
   };
 
-  // IMPROVED: Unpaid Leave Card with pending and used days
+  // IMPROVED: Unpaid Leave Card with pending and used days and proper typing
   const UnpaidLeaveCard = () => {
     const [appliedLeaves, setAppliedLeaves] = React.useState({
       pending: 0,
@@ -548,20 +535,22 @@ const MyLeavesPage = ({ employee, leaveRequests, setLeaveRequests }: MyLeavesPro
     });
 
     React.useEffect(() => {
-      // Calculate unpaid leaves (including half days as 0.5)
-      const unpaidLeaves = myLeaves.filter(leave =>
+      // Calculate unpaid leaves (including half days as 0.5) with proper typing
+      const unpaidLeaves = myLeaves.filter((leave: LeaveRequest) =>
         !leave.isPaid || (leave.isPaid && leave.paidDays === 0)
       );
 
       const pending = unpaidLeaves
-        .filter(l => l.status === 'pending')
-        .reduce((sum, l) => sum + (l.isHalfDay ? 0.5 : l.days), 0);
+        .filter((l: LeaveRequest) => l.status === 'pending')
+        .reduce((sum: number, l: LeaveRequest) => sum + (l.isHalfDay ? 0.5 : l.days), 0);
+      
       const approved = unpaidLeaves
-        .filter(l => l.status === 'approved')
-        .reduce((sum, l) => sum + (l.isHalfDay ? 0.5 : l.days), 0);
+        .filter((l: LeaveRequest) => l.status === 'approved')
+        .reduce((sum: number, l: LeaveRequest) => sum + (l.isHalfDay ? 0.5 : l.days), 0);
+      
       const rejected = unpaidLeaves
-        .filter(l => l.status === 'rejected')
-        .reduce((sum, l) => sum + (l.isHalfDay ? 0.5 : l.days), 0);
+        .filter((l: LeaveRequest) => l.status === 'rejected')
+        .reduce((sum: number, l: LeaveRequest) => sum + (l.isHalfDay ? 0.5 : l.days), 0);
 
       setAppliedLeaves({
         pending,
@@ -1526,7 +1515,7 @@ const MyLeavesPage = ({ employee, leaveRequests, setLeaveRequests }: MyLeavesPro
                 </tr>
               ) : (
                 <AnimatePresence>
-                  {myLeaves.map((leave: LeaveRequest, index: number) => (
+                  {(myLeaves as LeaveRequest[]).map((leave: LeaveRequest, index: number) => (
                     <motion.tr
                       key={leave.id}
                       initial={{ opacity: 0, y: 20 }}
@@ -1555,21 +1544,21 @@ const MyLeavesPage = ({ employee, leaveRequests, setLeaveRequests }: MyLeavesPro
                       <td className="px-6 py-4 text-gray-600">
                         <div className="flex flex-col">
                           <span className="font-semibold">
-                            {formatDuration(leave.from, leave.to, leave.isHalfDay)}
+                            {formatDuration(leave.from, leave.to, leave.isHalfDay || false)}
                           </span>
                           <span className="text-xs text-gray-400">
-                            {calculateExactDays(leave.from, leave.to, leave.isHalfDay)}
-                            {calculateExactDays(leave.from, leave.to, leave.isHalfDay) === 1 ? ' day' : ' days'}
+                            {calculateExactDays(leave.from, leave.to, leave.isHalfDay || false)}
+                            {calculateExactDays(leave.from, leave.to, leave.isHalfDay || false) === 1 ? ' day' : ' days'}
                           </span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-gray-800 text-lg">
-                            {calculateExactDays(leave.from, leave.to, leave?.isHalfDay)}
+                            {calculateExactDays(leave.from, leave.to, leave.isHalfDay || false)}
                           </span>
                           <span className="text-gray-400 text-sm">
-                            {calculateExactDays(leave.from, leave.to, leave?.isHalfDay) === 1 ? 'day' : 'days'}
+                            {calculateExactDays(leave.from, leave.to, leave.isHalfDay || false) === 1 ? 'day' : 'days'}
                           </span>
                         </div>
                       </td>

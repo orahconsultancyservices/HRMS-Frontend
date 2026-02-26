@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Clock, Calendar, DownloadCloud, TrendingUp, 
   CheckCircle, XCircle, CalendarDays, Search,
-  ChevronLeft, ChevronRight, Coffee, AlertCircle
+  ChevronLeft, ChevronRight, AlertCircle
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -75,18 +75,18 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
-  const [todayStatus, setTodayStatus] = useState<any>(null);
+  const [_todayStatus, setTodayStatus] = useState<any>(null);
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>([]);
-  const [breaks, setBreaks] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [_breaks, setBreaks] = useState<any[]>([]);
+
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const canPunchIn = !todayStatus?.checkIn;
-  const canPunchOut = todayStatus?.checkIn && !todayStatus?.checkOut;
-  const workCompleted = todayStatus?.checkIn && todayStatus?.checkOut;
-  const activeBreak = breaks.find((b: any) => b.status === 'active');
-  const isOnBreak = !!activeBreak;
+  // const canPunchIn = !todayStatus?.checkIn;
+  // const canPunchOut = todayStatus?.checkIn && !todayStatus?.checkOut;
+  // const workCompleted = todayStatus?.checkIn && todayStatus?.checkOut;
+  // const activeBreak = breaks.find((b: any) => b.status === 'active');
+  // const isOnBreak = !!activeBreak;
 
   const formatTimeForDisplay = (dateTime: string | Date | null | undefined) => {
     if (!dateTime) return '--:--';
@@ -236,101 +236,6 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     setTimeout(() => setShowNotification(false), 3000);
   };
 
-  const handleClockIn = async () => {
-    setIsLoading(true);
-    try {
-      const response = await attendanceApi.clockIn(employeeIdNumber, {
-        location: 'Office',
-        notes: 'Punched in via web app'
-      });
-
-      if (response.success) {
-        showNotificationMessage('Successfully clocked in! Have a productive day!', 'success');
-        fetchTodayAttendance();
-        fetchAttendanceHistory();
-      } else {
-        throw new Error(response.message || 'Failed to clock in');
-      }
-    } catch (error: any) {
-      console.error('Error punching in:', error);
-      const errorMessage = error.response?.data?.message 
-        || error.message 
-        || 'Failed to punch in. Please try again.';
-      showNotificationMessage(errorMessage, 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleClockOut = async () => {
-    setIsLoading(true);
-    try {
-      const response = await attendanceApi.clockOut(employeeIdNumber, {
-        location: 'Office',
-        notes: 'Punched out via web app'
-      });
-
-      if (response.success) {
-        showNotificationMessage('Successfully clocked out! See you tomorrow!', 'success');
-        fetchTodayAttendance();
-        fetchAttendanceHistory();
-      } else {
-        throw new Error(response.message || 'Failed to clock out');
-      }
-    } catch (error: any) {
-      console.error('Error punching out:', error);
-      const errorMessage = error.response?.data?.message 
-        || error.message 
-        || 'Failed to punch out. Please try again.';
-      showNotificationMessage(errorMessage, 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleStartBreak = async () => {
-    setIsLoading(true);
-    try {
-      const response = await attendanceApi.startBreak(employeeIdNumber, {
-        reason: 'Coffee break'
-      });
-
-      if (response.success) {
-        showNotificationMessage('Break started. Enjoy your break! ☕', 'success');
-        fetchBreaks();
-        fetchTodayAttendance();
-      } else {
-        throw new Error(response.message || 'Failed to start break');
-      }
-    } catch (error: any) {
-      console.error('Error starting break:', error);
-      showNotificationMessage(error.response?.data?.message || 'Failed to start break', 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleEndBreak = async () => {
-    if (!activeBreak) return;
-    
-    setIsLoading(true);
-    try {
-      const response = await attendanceApi.endBreak(employeeIdNumber, activeBreak.id);
-
-      if (response.success) {
-        showNotificationMessage('Break ended!', 'success');
-        fetchBreaks();
-        fetchTodayAttendance();
-      } else {
-        throw new Error(response.message || 'Failed to end break');
-      }
-    } catch (error: any) {
-      console.error('Error ending break:', error);
-      showNotificationMessage(error.response?.data?.message || 'Failed to end break', 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleExportAttendance = async () => {
     setIsExporting(true);
@@ -424,10 +329,9 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
   });
 
   const totalPresent = filteredAttendance.filter((a: any) => a.status === 'present').length;
-  const totalAbsent = filteredAttendance.filter((a: any) => a.status === 'absent').length;
   const totalLate = filteredAttendance.filter((a: any) => a.status === 'late').length;
   const totalHalfDay = filteredAttendance.filter((a: any) => a.status === 'half_day').length;
-  const totalOnLeave = filteredAttendance.filter((a: any) => a.status === 'on_leave').length;
+
   
   const averageHours = filteredAttendance
     .filter((a: any) => a.status === 'present' || a.status === 'late' || a.status === 'half_day')
@@ -486,9 +390,7 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     visible: { y: 0, opacity: 1 }
   };
 
-  const totalBreakTime = breaks
-    .filter(brk => brk.status === 'completed')
-    .reduce((sum, brk) => sum + (brk.duration || 0), 0);
+
 
   return (
     <motion.div 

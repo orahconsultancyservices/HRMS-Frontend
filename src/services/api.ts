@@ -1,7 +1,8 @@
 // src/services/api.ts - UPDATED VERSION
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://hrms-backend-624104167591.asia-southeast1.run.app/api';
 
 const api = axios.create({
   baseURL: API_URL,

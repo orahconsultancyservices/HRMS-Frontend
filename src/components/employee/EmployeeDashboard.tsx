@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Calendar, Clock, LogIn, LogOut, Coffee, ChevronLeft, ChevronRight, BarChart3, Filter, List, Download } from 'lucide-react';
+import { Calendar, Clock, LogIn, LogOut, Coffee, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { attendanceApi } from '../../services/api';
 
@@ -19,6 +19,8 @@ interface AttendanceRecord {
   totalBreakTime?: string;
   location?: string;
   notes?: string;
+  breaks?: number; // Added for break statistics
+  breakCount?: number; // Added for break count
 }
 
 interface EmployeeDashboardProps {
@@ -32,20 +34,7 @@ interface EmployeeDashboardProps {
   setAttendance: React.Dispatch<React.SetStateAction<AttendanceRecord[]>>;
 }
 
-interface AttendanceHistoryItem {
-  id: number;
-  date: string;
-  checkIn: string | null;
-  checkOut: string | null;
-  totalHours: number | null;
-  status: string;
-  breaks: number;
-  location?: string;
-  notes?: string;
-  day?: string;
-}
-
-const EmployeeDashboard = ({ employee, attendance, setAttendance }: EmployeeDashboardProps) => {
+const EmployeeDashboard = ({ employee }: EmployeeDashboardProps) => {
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
   const [isClocking, setIsClocking] = useState(false);
@@ -131,16 +120,6 @@ const EmployeeDashboard = ({ employee, attendance, setAttendance }: EmployeeDash
     }
   };
 
-  // Get day name from date
-  const getDayName = (dateStr: string) => {
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { weekday: 'short' });
-    } catch (error) {
-      return '';
-    }
-  };
-
   // Format hours for display
   const formatHoursForDisplay = (hours: number | null | undefined) => {
     if (!hours || hours === 0) return '--';
@@ -151,7 +130,7 @@ const EmployeeDashboard = ({ employee, attendance, setAttendance }: EmployeeDash
   };
 
   // Fetch today's attendance
-  const fetchTodayAttendance = async (forceRefresh = false) => {
+  const fetchTodayAttendance = async (_forceRefresh = false) => {
     try {
       console.log('Fetching today attendance for employee:', employeeIdNumber);
 
@@ -250,23 +229,6 @@ const EmployeeDashboard = ({ employee, attendance, setAttendance }: EmployeeDash
     return summary;
   };
 
-  // Remove all history-related functions:
-  // - fetchAttendanceHistory()
-  // - applyHistoryFilters()
-  // - resetHistoryFilters()
-
-  // Get status badge color
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'present': return 'bg-green-100 text-green-700';
-      case 'late': return 'bg-yellow-100 text-yellow-700';
-      case 'absent': return 'bg-red-100 text-red-700';
-      case 'half_day': return 'bg-orange-100 text-orange-700';
-      case 'on_leave': return 'bg-purple-100 text-purple-700';
-      default: return 'bg-gray-100 text-gray-700';
-    }
-  };
-
   // Handle punch in
   const handlePunchIn = async () => {
     setIsClocking(true);
@@ -292,7 +254,7 @@ const EmployeeDashboard = ({ employee, attendance, setAttendance }: EmployeeDash
           response.data.status === 'late' ? 'warning' : 'success'
         );
 
-        await fetchTodayAttendance(true);
+        await fetchTodayAttendance();
         await fetchBreaks();
       } else {
         throw new Error(response.message || 'Failed to punch in');
@@ -330,8 +292,8 @@ const EmployeeDashboard = ({ employee, attendance, setAttendance }: EmployeeDash
         showNotificationMessage('Successfully punched out! See you tomorrow!', 'success');
 
         // Refresh both today's attendance and breaks data
-        await fetchTodayAttendance(true);
-        await fetchBreaks(); // Add this line
+        await fetchTodayAttendance();
+        await fetchBreaks();
 
       } else {
         throw new Error(response.message || 'Failed to punch out');
@@ -347,8 +309,6 @@ const EmployeeDashboard = ({ employee, attendance, setAttendance }: EmployeeDash
       setLoading(false);
     }
   };
-
-
 
   // Format break duration
   const formatBreakDuration = (minutes: number) => {
@@ -402,8 +362,8 @@ const EmployeeDashboard = ({ employee, attendance, setAttendance }: EmployeeDash
       return sum + (brk.duration || 0);
     } else if (brk.status === 'active' && brk.startTime) {
       // Calculate duration for active breaks
-      const startTime = new Date(brk.startTime);
-      const now = new Date();
+      const startTime = new Date(brk.startTime).getTime();
+      const now = new Date().getTime();
       const durationInMinutes = Math.round((now - startTime) / (1000 * 60));
       return sum + durationInMinutes;
     }
@@ -480,7 +440,8 @@ const EmployeeDashboard = ({ employee, attendance, setAttendance }: EmployeeDash
     }
   };
 
-  const showNotificationMessage = (message: string, type: 'success' | 'warning' | 'error') => {
+  // Updated showNotificationMessage to accept 'info' type
+  const showNotificationMessage = (message: string, type: 'success' | 'warning' | 'error' | 'info') => {
     setNotification({ message, type });
     setShowNotification(true);
     setTimeout(() => setShowNotification(false), 3000);
@@ -667,15 +628,21 @@ const EmployeeDashboard = ({ employee, attendance, setAttendance }: EmployeeDash
               ? 'bg-green-50 border-green-500 text-green-800'
               : notification.type === 'warning'
                 ? 'bg-yellow-50 border-yellow-500 text-yellow-800'
-                : 'bg-red-50 border-red-500 text-red-800'
+                : notification.type === 'error'
+                  ? 'bg-red-50 border-red-500 text-red-800'
+                  : 'bg-blue-50 border-blue-500 text-blue-800' // Added for 'info' type
               }`}
           >
             <div className="flex items-center gap-3">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${notification.type === 'success' ? 'bg-green-100 text-green-600' :
                 notification.type === 'warning' ? 'bg-yellow-100 text-yellow-600' :
-                  'bg-red-100 text-red-600'
+                  notification.type === 'error' ? 'bg-red-100 text-red-600' :
+                    'bg-blue-100 text-blue-600' // Added for 'info' type
                 }`}>
-                {notification.type === 'success' ? '✓' : notification.type === 'warning' ? '⚠' : '✗'}
+                {notification.type === 'success' ? '✓' : 
+                 notification.type === 'warning' ? '⚠' : 
+                 notification.type === 'error' ? '✗' : 
+                 'ℹ'} {/* Added for 'info' type */}
               </div>
               <p className="font-medium">{notification.message}</p>
             </div>
@@ -699,7 +666,7 @@ const EmployeeDashboard = ({ employee, attendance, setAttendance }: EmployeeDash
       {/* Punch Card and Monthly Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
         {/* Enhanced Clock Card */}
-<motion.div
+        <motion.div
           variants={itemVariants}
           className="bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] rounded-2xl p-6 text-white overflow-hidden relative shadow-xl"
         >
@@ -880,7 +847,6 @@ const EmployeeDashboard = ({ employee, attendance, setAttendance }: EmployeeDash
             </motion.div>
           </div>
         </motion.div>
-
 
         {/* Monthly Attendance Section (Calendar Only) */}
         <motion.div

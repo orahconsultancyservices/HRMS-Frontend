@@ -26,15 +26,6 @@ interface LeaveRequest {
   to: string;
 }
 
-interface Attendance {
-  id: string;
-  empId: string;
-  empName: string;
-  date: string;
-  status: 'present' | 'absent' | 'late' | 'half_day' | 'on_leave';
-  checkIn?: string;
-  checkOut?: string;
-}
 
 interface DashboardStats {
   totalEmployees: number;
@@ -61,9 +52,8 @@ const EmployerDashboard = () => {
   });
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch all data for dashboard
-  useEffect(() => {
-    const fetchDashboardData = async () => {
+
+   const fetchDashboardData = async () => {
       try {
         setLoading({ stats: true, employees: true, leaves: true });
         
@@ -138,16 +128,18 @@ const EmployerDashboard = () => {
         setLoading({ stats: false, employees: false, leaves: false });
       }
     };
+  // Fetch all data for dashboard
+  useEffect(() => {
+   
 
     fetchDashboardData();
   }, []);
 
   // Refresh function
-  const refreshData = () => {
-    setError(null);
-    setLoading({ stats: true, employees: true, leaves: true });
-    fetchDashboardData();
-  };
+const refreshData = () => {
+  setError(null);
+  fetchDashboardData();
+};
 
   // Loading state
   if (loading.stats || loading.employees || loading.leaves) {
@@ -293,7 +285,7 @@ const EmployerDashboard = () => {
         </div>
 
         {/* Upcoming Birthdays */}
-        <UpcomingBirthdays employees={employees} />
+        <UpcomingBirthdays />
       </div>
 
       {/* Additional Dashboard Sections */}

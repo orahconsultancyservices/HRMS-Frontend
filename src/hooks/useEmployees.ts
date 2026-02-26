@@ -26,7 +26,7 @@ export interface Employee {
 }
 
 // Create employee data interface
-export interface CreateEmployeeData {
+interface CreateEmployeeData {
   firstName: string;
   lastName: string;
   employeeId: string;
@@ -45,12 +45,12 @@ export interface CreateEmployeeData {
 }
 
 // Update employee data interface
-export interface UpdateEmployeeData extends Partial<CreateEmployeeData> {
+interface UpdateEmployeeData extends Partial<CreateEmployeeData> {
   isActive?: boolean;
 }
 
 // Leave balance interface
-export interface LeaveBalance {
+interface LeaveBalance {
   casual: number;
   sick: number;
   earned: number;
@@ -217,7 +217,7 @@ export const useDeleteEmployee = () => {
       console.log('✅ Employee deleted:', response);
       return response;
     },
-    onSuccess: (data, id) => {
+    onSuccess: (_data, id) => {
       console.log(`✅ Employee ${id} deletion successful, invalidating cache`);
       
       // Invalidate and remove from cache

@@ -1,5 +1,3 @@
-
-
 // src/components/employer/AttendancePage.tsx - ENHANCED WITH TIME PICKER
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,7 +6,7 @@ import {
   Search, DownloadCloud, CalendarDays,
   ChevronLeft, ChevronRight, Edit2, Save, XCircle
 } from 'lucide-react';
-import { useAttendance, useAttendanceStats } from '../../hooks/useAttendance';
+import { useAttendance } from '../../hooks/useAttendance';
 import { useEmployees } from '../../hooks/useEmployees';
 
 type DateRange = [Date | null, Date | null];
@@ -19,6 +17,18 @@ interface EditingRecord {
   checkOutTime: string;
   notes: string;
   status: string;
+}
+
+interface AttendanceRecord {
+  id: number;
+  employeeId: number;
+  date: string;
+  checkIn: string;
+  checkOut: string | null;
+  status: string;
+  totalHours?: number;
+  breaks?: number;
+  notes?: string;
 }
 
 // Helper function to format time in EST
@@ -64,13 +74,13 @@ const combineDateTime = (originalDateTime: string, newTime: string): string => {
 };
 
 // Time Input Component
-const TimeInput = ({ 
-  value, 
-  onChange, 
-  label 
-}: { 
-  value: string; 
-  onChange: (time: string) => void; 
+const TimeInput = ({
+  value,
+  onChange,
+  label
+}: {
+  value: string;
+  onChange: (time: string) => void;
   label: string;
 }) => {
   return (
@@ -87,11 +97,11 @@ const TimeInput = ({
 };
 
 // Status Select Component
-const StatusSelect = ({ 
-  value, 
-  onChange 
-}: { 
-  value: string; 
+const StatusSelect = ({
+  value,
+  onChange
+}: {
+  value: string;
   onChange: (status: string) => void;
 }) => {
   const statuses = [
@@ -121,7 +131,7 @@ const StatusSelect = ({
 };
 
 const AttendancePage = () => {
-  const [dateRange, setDateRange] = useState<DateRange>([null, null]);
+  const [dateRange, _setDateRange] = useState<DateRange>([null, null]);
   const [startDate, endDate] = dateRange;
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -160,7 +170,7 @@ const AttendancePage = () => {
     return params;
   }, [departmentFilter, startDate, endDate, statusFilter]);
 
-  const { data: attendanceData = [], isLoading: isLoadingAttendance, refetch } = useAttendance(attendanceParams);
+ const { data: attendanceData = [] as AttendanceRecord[], isLoading: isLoadingAttendance, refetch } = useAttendance(attendanceParams);
 
   // Process employees
   const processedEmployees = useMemo(() => {
@@ -184,14 +194,14 @@ const AttendancePage = () => {
     const monthStart = new Date(selectedYear, selectedMonth, 1);
     const monthEnd = new Date(selectedYear, selectedMonth + 1, 0);
 
-    return attendanceData.filter(record => {
+    return attendanceData.filter((record: AttendanceRecord) => {
       const recordDate = new Date(record.date);
       return recordDate >= monthStart && recordDate <= monthEnd;
     });
   }, [attendanceData, selectedMonth, selectedYear]);
 
   const filteredAttendance = useMemo(() => {
-    return attendanceData.filter(record => {
+    return attendanceData.filter((record: AttendanceRecord) => {
       const employee = processedEmployees.find(e => e.id === record.employeeId);
       const employeeName = employee ? `${employee.firstName} ${employee.lastName}` : '';
 
@@ -205,11 +215,11 @@ const AttendancePage = () => {
   }, [attendanceData, processedEmployees, searchTerm]);
 
   // Statistics
-  const presentCount = filteredAttendance.filter(a => a.status === 'present').length;
-  const absentCount = filteredAttendance.filter(a => a.status === 'absent').length;
-  const lateCount = filteredAttendance.filter(a => a.status === 'late').length;
-  const halfDayCount = filteredAttendance.filter(a => a.status === 'half_day').length;
-  const onLeaveCount = filteredAttendance.filter(a => a.status === 'on_leave').length;
+const presentCount = filteredAttendance.filter((a: AttendanceRecord) => a.status === 'present').length;
+const absentCount = filteredAttendance.filter((a: AttendanceRecord) => a.status === 'absent').length;
+const lateCount = filteredAttendance.filter((a: AttendanceRecord) => a.status === 'late').length;
+const halfDayCount = filteredAttendance.filter((a: AttendanceRecord) => a.status === 'half_day').length;
+const onLeaveCount = filteredAttendance.filter((a: AttendanceRecord) => a.status === 'on_leave').length;
 
   const totalRecords = filteredAttendance.length;
   const attendanceRate = totalRecords > 0
@@ -257,7 +267,7 @@ const AttendancePage = () => {
   };
 
   // Edit functions
-  const handleEditRecord = (record: any) => {
+  const handleEditRecord = (record: AttendanceRecord) => {
     setEditingRecord({
       id: record.id,
       checkInTime: extractTime(record.checkIn),
@@ -273,14 +283,14 @@ const AttendancePage = () => {
     try {
       // Find the original record to get the date
       const originalRecord = getAttendanceForDate(selectedDate!.date)
-        .find(r => r.id === editingRecord.id);
+  .find((r: AttendanceRecord) => r.id === editingRecord.id);
 
       if (!originalRecord) {
         throw new Error('Original record not found');
       }
 
       // Combine the date with the new times
-      const newCheckIn = editingRecord.checkInTime 
+      const newCheckIn = editingRecord.checkInTime
         ? combineDateTime(originalRecord.checkIn, editingRecord.checkInTime)
         : originalRecord.checkIn;
 
@@ -330,7 +340,7 @@ const AttendancePage = () => {
     const utcDate = new Date(Date.UTC(selectedYear, selectedMonth, date));
     const targetDateStr = utcDate.toISOString().split('T')[0];
 
-    return monthlyAttendance.filter(record => {
+    return monthlyAttendance.filter((record: AttendanceRecord) => {
       if (!record.date) return false;
       const recordDate = new Date(record.date);
       const recordDateUTC = new Date(Date.UTC(
@@ -361,9 +371,9 @@ const AttendancePage = () => {
 
       let status = 'none';
       if (hasAttendance) {
-        const presentRecords = records.filter(r => r.status === 'present');
-        const lateRecords = records.filter(r => r.status === 'late');
-        const absentRecords = records.filter(r => r.status === 'absent');
+        const presentRecords = records.filter((r: AttendanceRecord) => r.status === 'present');
+        const lateRecords = records.filter((r: AttendanceRecord)=> r.status === 'late');
+        const absentRecords = records.filter((r: AttendanceRecord)=> r.status === 'absent');
 
         if (presentRecords.length > 0) {
           status = 'present';
@@ -391,11 +401,11 @@ const AttendancePage = () => {
   const getDateStatusSummary = (date: number) => {
     const records = getAttendanceForDate(date);
     return {
-      present: records.filter(r => r.status === 'present').length,
-      absent: records.filter(r => r.status === 'absent').length,
-      late: records.filter(r => r.status === 'late').length,
-      onLeave: records.filter(r => r.status === 'on_leave').length,
-      halfDay: records.filter(r => r.status === 'half_day').length,
+      present: records.filter((r: AttendanceRecord) => r.status === 'present').length,
+      absent: records.filter((r: AttendanceRecord) => r.status === 'absent').length,
+      late: records.filter((r: AttendanceRecord) => r.status === 'late').length,
+      onLeave: records.filter((r: AttendanceRecord) => r.status === 'on_leave').length,
+      halfDay: records.filter((r: AttendanceRecord) => r.status === 'half_day').length,
       total: records.length
     };
   };
@@ -440,7 +450,7 @@ const AttendancePage = () => {
     }
   };
 
-  const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
+  // const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
   const firstDayOfMonth = getFirstDayOfMonth(selectedYear, selectedMonth);
 
   if (isLoadingEmployees || isLoadingAttendance) {
@@ -474,9 +484,8 @@ const AttendancePage = () => {
           whileTap={{ scale: 0.95 }}
           onClick={handleExportMonthly}
           disabled={isExporting}
-          className={`px-6 py-3 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-xl hover:shadow-lg transition cursor-pointer flex items-center gap-2 ${
-            isExporting ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
+          className={`px-6 py-3 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-xl hover:shadow-lg transition cursor-pointer flex items-center gap-2 ${isExporting ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
         >
           <DownloadCloud className="w-5 h-5" />
           {isExporting ? 'Exporting...' : 'Export Monthly Report (EST)'}
@@ -622,18 +631,17 @@ const AttendancePage = () => {
               <div key={`empty-${index}`} className="min-h-32 rounded-lg bg-gray-50 p-2" />
             ))}
 
-            {generateCalendarDays().days.map(({ day, date, records, isToday, isWeekend, hasAttendance, status }) => {
+            {generateCalendarDays().days.map(({ day, records, isToday, isWeekend, hasAttendance }) => {
               const statusSummary = getDateStatusSummary(day);
 
               return (
                 <motion.div
                   key={day}
                   whileHover={{ scale: 1.02 }}
-                  className={`min-h-32 rounded-lg border p-3 transition-all cursor-pointer ${
-                    isToday
+                  className={`min-h-32 rounded-lg border p-3 transition-all cursor-pointer ${isToday
                       ? 'border-[#F5A42C] bg-gradient-to-br from-[#F5A42C]/10 to-[#F5A42C]/5'
                       : 'border-gray-200 hover:border-[#6B8DA2]'
-                  } ${hasAttendance ? 'bg-white' : 'bg-gray-50'}`}
+                    } ${hasAttendance ? 'bg-white' : 'bg-gray-50'}`}
                   onClick={() => handleDateClick(day)}
                 >
                   <div className="flex justify-between items-center mb-2">
@@ -735,11 +743,11 @@ const AttendancePage = () => {
                       })}
                     </p>
                   </div>
-                  <button 
-                    onClick={() => { 
-                      setShowDateDetails(false); 
-                      setEditingRecord(null); 
-                    }} 
+                  <button
+                    onClick={() => {
+                      setShowDateDetails(false);
+                      setEditingRecord(null);
+                    }}
                     className="p-2 hover:bg-gray-100 rounded-lg"
                   >
                     <X className="w-5 h-5" />
@@ -763,7 +771,7 @@ const AttendancePage = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {getAttendanceForDate(selectedDate.date).map((record) => {
+                        {getAttendanceForDate(selectedDate.date).map((record: AttendanceRecord) => {
                           const employee = processedEmployees.find(emp => emp.id === record.employeeId);
                           const isEditing = editingRecord?.id === record.id;
 
@@ -778,9 +786,9 @@ const AttendancePage = () => {
                                 {isEditing ? (
                                   <TimeInput
                                     value={editingRecord.checkInTime}
-                                    onChange={(time) => setEditingRecord({ 
-                                      ...editingRecord, 
-                                      checkInTime: time 
+                                    onChange={(time) => setEditingRecord({
+                                      ...editingRecord!,   // <-- add !
+                                      checkInTime: time
                                     })}
                                     label=""
                                   />
@@ -792,9 +800,9 @@ const AttendancePage = () => {
                                 {isEditing ? (
                                   <TimeInput
                                     value={editingRecord.checkOutTime}
-                                    onChange={(time) => setEditingRecord({ 
-                                      ...editingRecord, 
-                                      checkOutTime: time 
+                                    onChange={(time) => setEditingRecord({
+                                      ...editingRecord!,
+                                      checkOutTime: time
                                     })}
                                     label=""
                                   />
@@ -810,9 +818,9 @@ const AttendancePage = () => {
                                 {isEditing ? (
                                   <StatusSelect
                                     value={editingRecord.status}
-                                    onChange={(status) => setEditingRecord({ 
-                                      ...editingRecord, 
-                                      status 
+                                    onChange={(status) => setEditingRecord({
+                                      ...editingRecord!,
+                                      status
                                     })}
                                   />
                                 ) : (
@@ -824,15 +832,15 @@ const AttendancePage = () => {
                               <td className="py-3 px-4">
                                 {isEditing ? (
                                   <div className="flex gap-2">
-                                    <button 
-                                      onClick={handleSaveEdit} 
+                                    <button
+                                      onClick={handleSaveEdit}
                                       className="text-green-600 p-1 hover:bg-green-50 rounded"
                                       title="Save"
                                     >
                                       <Save className="w-4 h-4" />
                                     </button>
-                                    <button 
-                                      onClick={() => setEditingRecord(null)} 
+                                    <button
+                                      onClick={() => setEditingRecord(null)}
                                       className="text-red-600 p-1 hover:bg-red-50 rounded"
                                       title="Cancel"
                                     >
@@ -840,8 +848,8 @@ const AttendancePage = () => {
                                     </button>
                                   </div>
                                 ) : (
-                                  <button 
-                                    onClick={() => handleEditRecord(record)} 
+                                  <button
+                                    onClick={() => handleEditRecord(record)}
                                     className="text-[#6B8DA2] p-1 hover:bg-blue-50 rounded"
                                     title="Edit"
                                   >

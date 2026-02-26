@@ -1,7 +1,7 @@
 // src/hooks/useTasks.ts - React Query Hooks for Task Management
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { taskApi,type CreateTaskData, type SubmitProgressData } from '../services/Taskapi';
+import { taskApi,type CreateTaskData, type SubmitProgressData } from '../services/taskApi';
 
 // ============================================
 // GET ALL TASKS

@@ -109,8 +109,21 @@ export const useLeavesByEmployee = (empId: number | string) => {
         const response = await leaveApi.getByEmployee(empId as number);
         console.log('📥 Employee leaves response:', response);
         
-        if (response && response.success && Array.isArray(response.data)) {
-          return response.data;
+        // Fix: Check the response structure properly
+        // Assuming the API returns { success: boolean, data: any[] }
+        if (response && response.data) {
+          // Check if response.data has success property
+          if (response.data.success && Array.isArray(response.data.data)) {
+            return response.data.data;
+          }
+          // If response.data is directly an array
+          else if (Array.isArray(response.data)) {
+            return response.data;
+          }
+        }
+        // If response itself has success property
+        else if (response && (response as any).success && Array.isArray((response as any).data)) {
+          return (response as any).data;
         }
         
         return [];

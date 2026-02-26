@@ -5,8 +5,7 @@ import {
   Users, UserPlus, Search, Filter, Mail, Phone, MapPin,
   Briefcase, Calendar, Eye, Edit, Trash2,
   ChevronDown, ChevronUp,
-  CheckCircle, Clock,
-  DownloadCloud, X, Building,
+  CheckCircle, Clock, X, Building,
   PhoneCall, PhoneMissed,
   User, Lock, ChevronLeft, ChevronRight,
   Cake,
@@ -24,7 +23,7 @@ import {
   useLeaveBalance,
   useUpdateLeaveBalance
 } from '../../hooks/useEmployees';
-import { useLeaves, useLeavesByEmployee } from '../../hooks/useLeaves';
+import { useLeaves } from '../../hooks/useLeaves';
 import { useEmployeeAttendance } from '../../hooks/useAttendance';
 import { useQuery } from '@tanstack/react-query';
 // import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
@@ -34,25 +33,22 @@ interface Employee {
   id: number;
   firstName: string;
   lastName: string;
-  employeeId: string; // This comes from API
+  employeeId: string;
   email: string;
-  orgEmail: string;
-  orgPassword: string; // Actual password from API
-  phone: string;
-  department: string;
-  position: string;
+  orgEmail?: string;        // was string, now optional
+  orgPassword?: string;     // was string, now optional
+  phone?: string;
+  department?: string;
+  position?: string;
   joinDate: string;
   leaveDate?: string;
-  birthday?: string; // This is in the API response
+  birthday?: string;
   avatar?: string;
   location?: string;
   emergencyContact?: string;
   isActive?: boolean;
-  // Add fields that might be missing but useful
-  name?: string; // Not in API, but we can compute it
-  empId?: string; // Alternative ID field
-
-  // Add leave balance from API
+  name?: string;            // add this
+  empId?: string;
   leaveBalance?: {
     id: number;
     employeeId: number;
@@ -64,22 +60,7 @@ interface Employee {
     bereavement?: number;
   };
 }
-interface LeaveRequest {
-  id: number;
-  empId: number;
-  empName: string;
-  type: 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Paternity' | 'Bereavement';
-  from: string;
-  to: string;
-  days: number;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected';
-  appliedDate: string;
-  department?: string;
-  contactDuringLeave?: string;
-  addressDuringLeave?: string;
-  managerNotes?: string;
-}
+
 
 interface NewEmployeeForm {
   firstName: string;
@@ -510,12 +491,7 @@ const LeaveBalanceTab: React.FC<LeaveBalanceTabProps> = ({ employee }) => {
   const endIndex = startIndex + itemsPerPage;
   const currentLeaveHistory = allLeaveHistory.slice(startIndex, endIndex);
 
-  const [newLeave, setNewLeave] = useState({
-    type: 'Casual' as const,
-    startDate: '',
-    endDate: '',
-    reason: ''
-  });
+
 
   const getLeaveTypeColor = (type: string) => {
     switch (type) {
@@ -642,7 +618,7 @@ interface EmployeeFullInfoTabProps {
 }
 
 const EmployeeFullInfoTab: React.FC<EmployeeFullInfoTabProps> = ({ employee }) => {
-  const { data: leaveBalanceData } = useLeaveBalance(employee.id);
+
 
   if (!employee) {
     return (
@@ -655,80 +631,7 @@ const EmployeeFullInfoTab: React.FC<EmployeeFullInfoTabProps> = ({ employee }) =
     );
   }
 
-  const fixedBirthdayDisplay = (birthday: string) => {
-    if (!birthday) return 'Not provided';
 
-    // Method 1: Add T00:00:00 to force local time interpretation
-    const date = new Date(birthday + 'T00:00:00');
-
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const fixedJoinDateDisplay = (joinDate: string) => {
-    if (!joinDate) return 'Not provided';
-
-    const date = new Date(joinDate + 'T00:00:00');
-
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const fixedDatePickerInit = (dateString: string | null) => {
-    if (!dateString) return null;
-
-    // Parse date in local timezone
-    const [year, month, day] = dateString.split('T')[0].split('-');
-    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-  };
-
-  const parseLocalDate = (dateString: string): Date | null => {
-    if (!dateString) return null;
-
-    // Extract date part only (ignore time if present)
-    const datePart = dateString.split('T')[0];
-    const [year, month, day] = datePart.split('-').map(Number);
-
-    // Create date in local timezone
-    return new Date(year, month - 1, day);
-  };
-
-  const formatDateForAPI = (date: Date | null): string | undefined => {
-    if (!date) return undefined;
-
-    // Get local date components
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
-  };
-
-
-  // Filter to get only the leave type fields (numeric values)
-  const getLeaveBalanceFields = (data: any) => {
-    if (!data) return {};
-
-    const leaveTypes = ['casual', 'sick', 'earned', 'maternity', 'paternity', 'bereavement'];
-    const filtered: { [key: string]: number } = {};
-
-    leaveTypes.forEach(type => {
-      if (data[type] !== undefined && data[type] !== null) {
-        filtered[type] = data[type];
-      }
-    });
-
-    return filtered;
-  };
-
-  const leaveBalanceFields = getLeaveBalanceFields(leaveBalanceData);
 
   return (
     <div className="space-y-6">
@@ -786,22 +689,20 @@ const EmployeeFullInfoTab: React.FC<EmployeeFullInfoTabProps> = ({ employee }) =
                 Date of Birth
               </span>
               <span className="font-medium">
-                {employee.birthday ? (() => {
-                  // Force local timezone interpretation
-                  const date = new Date(employee.birthday + 'T00:00:00');
-                  return date.toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  });
-                })() : 'Not provided'}
+                {employee?.birthday ? new Date(employee.birthday).toLocaleDateString('en-US', {
+                  weekday: 'short',
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                  timeZone: 'UTC'
+                }) : 'Not provided'}
               </span>
             </div>
             <div className="flex justify-between py-2 border-b border-gray-100">
               <span className="text-gray-600">Organization Password</span>
               <div className="flex items-center gap-2">
                 <span className="font-medium">
-                  {employee.orgPassword ? '••••••••' : 'Not provided'}
+                  {employee.orgPassword ? employee.orgPassword : 'Not provided'}
                 </span>
                 {employee.orgPassword && <Lock className="w-4 h-4 text-gray-400" />}
               </div>
@@ -809,40 +710,19 @@ const EmployeeFullInfoTab: React.FC<EmployeeFullInfoTabProps> = ({ employee }) =
             <div className="flex justify-between py-2 border-b border-gray-100">
               <span className="text-gray-600">Join Date</span>
               <span className="font-medium">
-                {employee.joinDate ? (() => {
-                  const date = new Date(employee.joinDate + 'T00:00:00');
-                  return date.toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  });
-                })() : 'Not provided'}
+                {new Date(employee.joinDate).toLocaleDateString('en-US', {
+                  weekday: 'short',
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                  timeZone: 'UTC'
+                })}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Leave Balance Section */}
-      <div className="border-t border-gray-200 pt-6">
-        <h4 className="font-semibold text-gray-800 text-lg mb-4">Current Leave Balance</h4>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {Object.keys(leaveBalanceFields).length > 0 ? (
-            Object.entries(leaveBalanceFields).map(([type, days]) => (
-              <div key={type} className="bg-gray-50 rounded-xl p-4 text-center">
-                <div className="text-sm text-gray-600 capitalize">{type}</div>
-                <div className="text-2xl font-bold text-purple-600 mt-1">{days}</div>
-                <div className="text-xs text-gray-500">days left</div>
-              </div>
-            ))
-          ) : (
-            <div className="col-span-full text-center text-gray-500">
-              {leaveBalanceData ? 'No leave balance data available' : 'Loading leave balance...'}
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 };
@@ -865,7 +745,7 @@ const EmployeeLeaveHistoryTab: React.FC<EmployeeLeaveHistoryTabProps> = ({ emplo
         console.log('📥 Fetching leaves for employee ID:', employee.id);
 
         // Call API with numeric ID
-        const response = await leaveApi.getByEmployee(employee.id);
+        const response = await leaveApi.getByEmployee(employee.id) as any;
         console.log('✅ Raw API Response:', response);
 
         // Handle different response formats
@@ -1589,9 +1469,13 @@ const EmployeesPage = () => {
   const { data: leaveRequestsData } = useLeaves();
 
   const employees = Array.isArray(employeesData) ? employeesData : [];
-  const departments = Array.isArray(departmentsData) ? departmentsData : (Array.isArray(departmentsData?.data) ? departmentsData.data : []);
-  const positions = Array.isArray(positionsData) ? positionsData : (Array.isArray(positionsData?.data) ? positionsData.data : []);
-  const leaveRequests = Array.isArray(leaveRequestsData) ? leaveRequestsData : (Array.isArray(leaveRequestsData?.data) ? leaveRequestsData.data : []);
+  const departments = Array.isArray(departmentsData) ? departmentsData : (Array.isArray((departmentsData as any)?.data) ? (departmentsData as any).data : []);
+const positions = Array.isArray(positionsData) ? positionsData : (Array.isArray((positionsData as any)?.data) ? (positionsData as any).data : []);
+ const leaveRequests = Array.isArray(leaveRequestsData) 
+  ? leaveRequestsData 
+  : Array.isArray((leaveRequestsData as any)?.data) 
+    ? (leaveRequestsData as any).data 
+    : [];
 
   const createEmployeeMutation = useCreateEmployee();
   const updateEmployeeMutation = useUpdateEmployee();
@@ -1607,7 +1491,7 @@ const EmployeesPage = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false);
+  // const [showExportModal, setShowExportModal] = useState(false);
   const [showEmployeeDetailsModal, setShowEmployeeDetailsModal] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -1628,7 +1512,7 @@ const EmployeesPage = () => {
     emergencyContact: ''
   });
   const [isEditing, setIsEditing] = useState(false);
-  const [exportFormat, setExportFormat] = useState<'csv' | 'pdf' | 'excel'>('csv');
+  // const [exportFormat, setExportFormat] = useState<'csv' | 'pdf' | 'excel'>('csv');
   const [departmentsState, setDepartmentsState] = useState<string[]>([]);
   const [positionsState, setPositionsState] = useState<string[]>([]);
   const [showCustomDepartment, setShowCustomDepartment] = useState(false);
@@ -1673,7 +1557,7 @@ const EmployeesPage = () => {
     }
   }, [departments, positions]);
 
-  const transformApiEmployee = (apiEmployee: any): Employee => {
+  const transformApiEmployee = (apiEmployee: any): Employee | null => {
     if (!apiEmployee) return null;
 
     return {
@@ -1705,7 +1589,7 @@ const EmployeesPage = () => {
 
   const processedEmployees = React.useMemo(() => {
     if (Array.isArray(employeesData)) {
-      return employeesData.map(transformApiEmployee);
+      return employeesData.map(transformApiEmployee).filter(Boolean) as Employee[];
     }
     return [];
   }, [employeesData]);
@@ -1717,7 +1601,7 @@ const EmployeesPage = () => {
   }, [employeesData, employees, processedEmployees]);
 
   // Filter employees
-  const filteredEmployees = employees.filter(emp => {
+ const filteredEmployees = processedEmployees.filter(emp => {
     const matchesSearch = emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.position?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1740,65 +1624,65 @@ const EmployeesPage = () => {
     setShowEmployeeDetailsModal(true);
   };
 
-const parseLocalDate = (dateString: string | null | undefined): Date | null => {
-  if (!dateString) return null;
-  
-  try {
-    // Handle both ISO format (2024-12-31T00:00:00) and simple date format (2024-12-31)
-    const datePart = dateString.split('T')[0];
-    const [year, month, day] = datePart.split('-').map(Number);
-    
-    // Validate the parsed values
-    if (isNaN(year) || isNaN(month) || isNaN(day) || 
+  const parseLocalDate = (dateString: string | null | undefined): Date | null => {
+    if (!dateString) return null;
+
+    try {
+      // Handle both ISO format (2024-12-31T00:00:00) and simple date format (2024-12-31)
+      const datePart = dateString.split('T')[0];
+      const [year, month, day] = datePart.split('-').map(Number);
+
+      // Validate the parsed values
+      if (isNaN(year) || isNaN(month) || isNaN(day) ||
         month < 1 || month > 12 || day < 1 || day > 31) {
+        return null;
+      }
+
+      return new Date(year, month - 1, day);
+    } catch (error) {
+      console.error('Error parsing date:', dateString, error);
       return null;
     }
-    
-    return new Date(year, month - 1, day);
-  } catch (error) {
-    console.error('Error parsing date:', dateString, error);
-    return null;
-  }
-};
-
-const handleEditEmployee = (employee: Employee) => {
-  // Safely generate employeeId with fallback
-  const generateEmployeeId = (): string => {
-    if (employee.employeeId) {
-      return employee.employeeId;
-    }
-    
-    // Fallback to using id if available
-    if (employee.id) {
-      return `EMP-${employee.id.toString().padStart(4, '0')}`;
-    }
-    
-    // If no id or employeeId, generate a temporary one or use empty string
-    return 'EMP-0000';
   };
 
-  setNewEmployee({
-    firstName: employee.firstName || '',
-    lastName: employee.lastName || '',
-    employeeId: generateEmployeeId(), // Use the helper function
-    email: employee.email || '',
-    orgEmail: employee.orgEmail || '',
-    orgPassword: '', // Leave empty for security
-    phone: employee.phone || '',
-    department: employee.department || '',
-    position: employee.position || '',
-    joinDate: parseLocalDate(employee.joinDate),
-    leaveDate: parseLocalDate(employee.leaveDate),
-    birthday: parseLocalDate(employee.birthday),
-    location: employee.location || '',
-    emergencyContact: employee.emergencyContact || ''
-  });
-  
-  setSelectedEmployee(employee);
-  setIsEditing(true);
-  setActiveEditTab('info');
-  setShowEmployeeModal(true);
-};
+  const handleEditEmployee = (employee: Employee) => {
+    // Safely generate employeeId with fallback
+    const generateEmployeeId = (): string => {
+      if (employee.employeeId) {
+        return employee.employeeId;
+      }
+
+      // Fallback to using id if available
+      if (employee.id) {
+        return `EMP-${employee.id.toString().padStart(4, '0')}`;
+      }
+
+      // If no id or employeeId, generate a temporary one or use empty string
+      return 'EMP-0000';
+    };
+
+    setNewEmployee({
+      firstName: employee.firstName || '',
+      lastName: employee.lastName || '',
+      employeeId: generateEmployeeId(), // Use the helper function
+      email: employee.email || '',
+      orgEmail: employee.orgEmail || '',
+      orgPassword: '', // Leave empty for security
+      phone: employee.phone || '',
+      department: employee.department || '',
+      position: employee.position || '',
+      joinDate: parseLocalDate(employee.joinDate),
+      leaveDate: parseLocalDate(employee.leaveDate),
+      birthday: parseLocalDate(employee.birthday),
+      location: employee.location || '',
+      emergencyContact: employee.emergencyContact || ''
+    });
+
+    setSelectedEmployee(employee);
+    setIsEditing(true);
+    setActiveEditTab('info');
+    setShowEmployeeModal(true);
+  };
 
   // Safe avatar getter
   // Update the getEmployeeAvatar function:
@@ -1858,6 +1742,7 @@ const handleEditEmployee = (employee: Employee) => {
       orgPassword: '',
       phone: '',
       department: '',
+      birthday: null,  
       position: '',
       joinDate: null,
       leaveDate: null,
@@ -1956,6 +1841,7 @@ const handleEditEmployee = (employee: Employee) => {
       orgPassword: '',
       phone: '',
       department: '',
+      birthday: null,   // ← add this
       position: '',
       joinDate: null,
       leaveDate: null,
@@ -2143,15 +2029,7 @@ const handleEditEmployee = (employee: Employee) => {
         </div>
 
         <div className="flex items-center gap-3">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowExportModal(true)}
-            className="px-4 py-2 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-xl hover:shadow-lg transition cursor-pointer flex items-center gap-2"
-          >
-            <DownloadCloud className="w-4 h-4" />
-            Export
-          </motion.button>
+
 
           <motion.button
             whileHover={{ scale: 1.05 }}
@@ -2228,7 +2106,7 @@ const handleEditEmployee = (employee: Employee) => {
                 {leaveRequests.length}
               </p>
               <p className="text-gray-400 text-sm mt-1">Pending: {
-                leaveRequests.filter(lr => lr.status === 'pending').length
+               leaveRequests.filter((lr: any) => lr.status === 'pending').length
               }</p>
             </div>
             <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-400 rounded-xl flex items-center justify-center shadow-lg">
@@ -2339,7 +2217,7 @@ const handleEditEmployee = (employee: Employee) => {
                   </span>
                 </h3>
                 <p className="text-gray-500 text-sm mt-1">
-                  Showing {filteredEmployees.length} of {employees.length} employees
+                  Showing {filteredEmployees.length} of {processedEmployees.length} employees
                 </p>
               </div>
             </div>
@@ -2372,7 +2250,7 @@ const handleEditEmployee = (employee: Employee) => {
                   ) : (
                     filteredEmployees.map((emp, index) => {
                       const isExpanded = expandedRows.has(emp.id);
-                      const employeeName = emp.name || `${emp.firstName} ${emp.lastName}`;
+                      // const employeeName = emp.name || `${emp.firstName} ${emp.lastName}`;
 
                       return (
                         <React.Fragment key={emp.id}>
@@ -2397,7 +2275,7 @@ const handleEditEmployee = (employee: Employee) => {
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${getDepartmentColor(emp.department)}`}>
+                              <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${getDepartmentColor(emp.department || '')}`}>
                                 {emp.department || 'N/A'}
                               </span>
                             </td>
@@ -2412,7 +2290,8 @@ const handleEditEmployee = (employee: Employee) => {
                               {emp.joinDate ? new Date(emp.joinDate).toLocaleDateString('en-US', {
                                 month: 'short',
                                 day: 'numeric',
-                                year: 'numeric'
+                                year: 'numeric',
+                                timeZone: 'UTC'
                               }) : 'N/A'}
                             </td>
                             <td className="px-6 py-4">
@@ -2840,83 +2719,8 @@ const handleEditEmployee = (employee: Employee) => {
         )}
       </AnimatePresence>
 
-      {/* Export Modal */}
-      <AnimatePresence>
-        {showExportModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-md"
-            >
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Export Employee Data</h3>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-gray-700 mb-2">Export Format</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {['csv', 'pdf', 'excel'].map((format) => (
-                      <motion.button
-                        key={format}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setExportFormat(format as 'csv' | 'pdf' | 'excel')}
-                        className={`px-4 py-3 rounded-lg border-2 cursor-pointer ${exportFormat === format
-                          ? 'border-purple-600 bg-purple-50 text-purple-700'
-                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                          }`}
-                      >
-                        {format.toUpperCase()}
-                      </motion.button>
-                    ))}
-                  </div>
-                </div>
 
-                <div>
-                  <label className="block text-gray-700 mb-2">Include Details</label>
-                  <div className="space-y-2">
-                    {[
-                      'Contact Information',
-                      'Employment Details',
-                      'Organization Credentials',
-                      'Leave Balance',
-                      'Department Information'
-                    ].map((item) => (
-                      <label key={item} className="flex items-center gap-3 cursor-pointer">
-                        <input type="checkbox" defaultChecked className="w-4 h-4 text-purple-600 rounded" />
-                        <span className="text-gray-700">{item}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    alert(`Exporting ${employees.length} employees in ${exportFormat.toUpperCase()} format...`);
-                    setShowExportModal(false);
-                  }}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-semibold hover:shadow-lg transition cursor-pointer"
-                >
-                  Export Data
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowExportModal(false)}
-                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition cursor-pointer"
-                >
-                  Cancel
-                </motion.button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 };

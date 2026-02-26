@@ -171,7 +171,7 @@ export const useClockIn = () => {
       console.log('✅ Clock in response:', response);
       return response;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       console.log('✅ Clock in successful, invalidating cache');
       queryClient.invalidateQueries({ queryKey: ['attendance'] });
       queryClient.invalidateQueries({ queryKey: ['attendance', 'today', variables.employeeId] });
@@ -194,7 +194,7 @@ export const useClockOut = () => {
       console.log('✅ Clock out response:', response);
       return response;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       console.log('✅ Clock out successful, invalidating cache');
       queryClient.invalidateQueries({ queryKey: ['attendance'] });
       queryClient.invalidateQueries({ queryKey: ['attendance', 'today', variables.employeeId] });
@@ -217,7 +217,7 @@ export const useStartBreak = () => {
       console.log('✅ Start break response:', response);
       return response;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       console.log('✅ Break started, invalidating cache');
       queryClient.invalidateQueries({ queryKey: ['attendance', 'today', variables.employeeId] });
       queryClient.invalidateQueries({ queryKey: ['breaks', variables.employeeId] });
@@ -239,7 +239,7 @@ export const useEndBreak = () => {
       console.log('✅ End break response:', response);
       return response;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       console.log('✅ Break ended, invalidating cache');
       queryClient.invalidateQueries({ queryKey: ['attendance', 'today', variables.employeeId] });
       queryClient.invalidateQueries({ queryKey: ['breaks', variables.employeeId] });
@@ -351,6 +351,7 @@ export const useDeleteAttendance = () => {
 };
 
 // Get attendance statistics
+// Get attendance statistics
 export const useAttendanceStats = (params?: {
   department?: string;
   startDate?: string;
@@ -364,8 +365,20 @@ export const useAttendanceStats = (params?: {
         const response = await attendanceApi.getStats();
         console.log('📊 Stats response:', response);
 
-        if (response && response.success && response.data) {
-          return response.data;
+        // Fix: Check response structure properly
+        // Check if response.data has success property
+        if (response && response.data) {
+          if ((response.data as any).success && (response.data as any).data) {
+            return (response.data as any).data;
+          }
+          // If response.data itself is the data
+          else {
+            return response.data;
+          }
+        }
+        // Check if response itself has success property
+        else if (response && (response as any).success && (response as any).data) {
+          return (response as any).data;
         }
 
         return null;

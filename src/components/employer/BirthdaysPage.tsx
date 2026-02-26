@@ -44,7 +44,7 @@ const BirthdaysPage = () => {
   }
 
   // Group birthdays by month
-  const grouped = (employees || []).reduce((acc: Record<number, typeof employees>, emp) => {
+ const grouped = (employees || []).reduce((acc: Record<number, NonNullable<typeof employees>>, emp) => {
     const dateStr = emp.birthday;
     if (!dateStr) return acc;
 
@@ -213,7 +213,7 @@ const BirthdaysPage = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {sortedMonths.map((month) => {
-              const monthEmployees = grouped[month];
+              const monthEmployees = (grouped[month] || []);
               const currentMonth = new Date().getMonth();
               const isCurrentMonth = month === currentMonth;
 
@@ -313,7 +313,7 @@ const BirthdaysPage = () => {
       >
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
           <div className="text-2xl font-bold text-[#6B8DA2]">
-            {Object.keys(grouped).reduce((sum, month) => sum + grouped[parseInt(month)].length, 0)}
+          { Object.keys(grouped || {}).reduce((sum, month) => sum + (grouped[parseInt(month)]?.length || 0), 0)}
           </div>
           <div className="text-sm text-gray-500">Total Birthdays</div>
         </div>
@@ -341,7 +341,7 @@ const BirthdaysPage = () => {
 
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
           <div className="text-2xl font-bold text-green-600">
-            {new Set((employees || []).map(emp => emp.department)).size}
+            {new Set((employees || []).map(emp => emp.department).filter(Boolean)).size}
           </div>
           <div className="text-sm text-gray-500">Departments</div>
         </div>
