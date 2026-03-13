@@ -519,7 +519,7 @@ const TeamLeadTaskManagement = ({ currentUser }: TeamLeadTaskManagementProps) =>
 
       {/* ══ DASHBOARD VIEW ══════════════════════════════════════════════════ */}
       {activeView === 'dashboard' && (
-        <motion.div variants={iv} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+  <motion.div key="dashboard" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
           {/* Team Progress */}
           <div className="lg:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
@@ -717,8 +717,8 @@ const TeamLeadTaskManagement = ({ currentUser }: TeamLeadTaskManagementProps) =>
       )}
 
       {/* ══ TASKS VIEW ══════════════════════════════════════════════════════ */}
-      {activeView === 'tasks' && (
-        <motion.div variants={iv} className="space-y-4">
+     {activeView === 'tasks' && (
+  <motion.div key="tasks" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="space-y-4">
           {/* Filters */}
           <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
             <div className="flex flex-wrap gap-3 items-center">
@@ -848,7 +848,7 @@ const TeamLeadTaskManagement = ({ currentUser }: TeamLeadTaskManagementProps) =>
 
       {/* ══ TEAM VIEW ═══════════════════════════════════════════════════════ */}
       {activeView === 'team' && (
-        <motion.div variants={iv} className="space-y-4">
+  <motion.div key="team" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="space-y-4">
           {teamMembers.length === 0 ? (
             <div className="bg-white border border-gray-100 rounded-2xl p-12 text-center">
               <UsersIcon className="w-10 h-10 text-gray-200 mx-auto mb-2" />
@@ -920,7 +920,7 @@ const TeamLeadTaskManagement = ({ currentUser }: TeamLeadTaskManagementProps) =>
 
       {/* ══ ASSIGN / DESIGNATIONS VIEW ══════════════════════════════════════ */}
       {activeView === 'assign' && (
-        <motion.div variants={iv} className="space-y-5">
+  <motion.div key="assign" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {Object.entries(DESIGNATION_KPI_TEMPLATES).map(([key, tmpl]) => (
               <div key={key} className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">

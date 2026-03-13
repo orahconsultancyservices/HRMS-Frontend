@@ -1,7 +1,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Clock, Gift, LogOut, Home,
-  FileText, ChevronRight, BookCheck, Target, Shield
+  FileText, ChevronRight, BookCheck, Target, Shield, DollarSign,
+  Lock,
+  SlidersHorizontal
 } from 'lucide-react';
 import { useCurrentUser, useLogout } from '../../hooks/useAuth';
 import logo from '../../assets/logo.png';
@@ -19,6 +21,8 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
     { id: 'dashboard', icon: Home, label: 'Dashboard' },
     { id: 'employees', icon: Users, label: 'Employees' },
     { id: 'tasks', icon: Target, label: 'Task Management' },
+    { id: 'sales',   label: 'Sales KPIs',      icon: DollarSign },
+    { id: 'locking', label: 'Lock Performance', icon: Lock },
     { id: 'leaves', icon: FileText, label: 'Leave Requests' },
     { id: 'attendance', icon: Clock, label: 'Attendance' },
     { id: 'birthdays', icon: Gift, label: 'Birthdays' },
@@ -30,6 +34,7 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
     { id: 'my-leaves', icon: FileText, label: 'My Leaves' },
     { id: 'my-attendance', icon: Clock, label: 'My Attendance' },
     { id: 'birthdays', icon: Gift, label: 'Birthdays' },
+    { id: 'adjust-targets', label: 'Adjust Targets', icon: SlidersHorizontal },
   ];
 
   const employeeTabs = [
@@ -45,17 +50,14 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
     user?.role === 'teamlead' ? teamLeadTabs :
     employeeTabs;
 
-  // Role label shown in the profile badge
   const roleLabel =
     user?.role === 'teamlead' ? 'Team Lead' : user?.role;
 
-  // Active tab highlight colour — teal for TL, original blue for others
   const activeColor =
     user?.role === 'teamlead'
       ? 'from-teal-600 to-teal-500'
       : 'from-[#6B8DA2] to-[#6B8DA2]';
 
-  // Hover colour on active tab — teal for TL, amber for others
   const activeHoverBg =
     user?.role === 'teamlead'
       ? 'rgba(20, 184, 166, 0.9)'
@@ -75,7 +77,7 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
       <motion.div
         initial={{ x: -100, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
-        className="w-64 bg-gradient-to-b from-[#2C3E50] via-[#34495E] to-[#1A252F] min-h-screen p-4 flex items-center justify-center"
+        className="w-64 sticky top-0 h-screen shrink-0 bg-gradient-to-b from-[#2C3E50] via-[#34495E] to-[#1A252F] p-4 flex items-center justify-center"
       >
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
       </motion.div>
@@ -87,14 +89,14 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
       initial={{ x: -100, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
-      className="w-64 bg-gradient-to-b from-[#2C3E50] via-[#34495E] to-[#1A252F] min-h-screen p-4 flex flex-col shadow-2xl"
+      className="w-64 sticky top-0 h-screen shrink-0 bg-gradient-to-b from-[#2C3E50] via-[#34495E] to-[#1A252F] p-4 flex flex-col shadow-2xl"
     >
       {/* Logo Section */}
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.1 }}
-        className="flex items-center gap-4 mb-8 px-2"
+        className="flex items-center gap-4 mb-8 px-2 shrink-0"
       >
         <motion.div
           whileHover={{ rotate: 0, scale: 1.1 }}
@@ -115,15 +117,19 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="flex items-center gap-2 mx-2 mb-4 px-3 py-2 rounded-lg bg-teal-500/15 border border-teal-500/25"
+          className="flex items-center gap-2 mx-2 mb-4 px-3 py-2 rounded-lg bg-teal-500/15 border border-teal-500/25 shrink-0"
         >
           <Shield className="w-3.5 h-3.5 text-teal-400 shrink-0" />
           <span className="text-teal-300 text-xs font-semibold">Team Lead Access</span>
         </motion.div>
       )}
 
-      {/* Navigation Tabs */}
-      <nav className="flex-1 space-y-1">
+      {/* Navigation — overflow-y-auto + min-h-0 lets it scroll without growing */}
+      <nav className="flex-1 space-y-1 overflow-y-auto min-h-0
+        [&::-webkit-scrollbar]:w-1
+        [&::-webkit-scrollbar-track]:transparent
+        [&::-webkit-scrollbar-thumb]:rounded-full
+        [&::-webkit-scrollbar-thumb]:bg-white/10">
         <AnimatePresence>
           {tabs.map((tab, index) => {
             const isActive = activeTab === tab.id;
@@ -145,7 +151,6 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                {/* Icon with animation */}
                 <motion.div
                   animate={{ scale: isActive ? 1.1 : 1 }}
                   transition={{ type: "spring", stiffness: 300 }}
@@ -153,10 +158,8 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
                   <tab.icon className="w-5 h-5" />
                 </motion.div>
 
-                {/* Label */}
                 <span className="font-medium whitespace-nowrap">{tab.label}</span>
 
-                {/* Active chevron */}
                 {isActive && (
                   <motion.div
                     initial={{ opacity: 0, x: -10 }}
@@ -172,14 +175,13 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
         </AnimatePresence>
       </nav>
 
-      {/* User Profile & Logout */}
+      {/* Profile & Logout — shrink-0 keeps it always visible at the bottom */}
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className="border-t border-gray-700/50 pt-4 mt-4"
+        className="border-t border-gray-700/50 pt-4 mt-4 shrink-0"
       >
-        {/* User Profile */}
         <motion.div
           whileHover={{ backgroundColor: 'rgba(55, 65, 81, 0.3)' }}
           className="flex items-center gap-3 px-4 py-3 mb-2 rounded-lg transition-colors"
@@ -187,7 +189,7 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
           <motion.div
             whileHover={{ scale: 1.1, rotate: 5 }}
             whileTap={{ scale: 0.95 }}
-            className="relative w-10 h-10 bg-gradient-to-br from-[#6B8DA2] to-[#F5A42C] rounded-full flex items-center justify-center text-white text-sm font-semibold shadow-lg"
+            className="relative w-10 h-10 bg-gradient-to-br from-[#6B8DA2] to-[#F5A42C] rounded-full flex items-center justify-center text-white text-sm font-semibold shadow-lg shrink-0"
           >
             {user.avatar || user.name.split(' ').map((n: string) => n[0]).join('')}
           </motion.div>
@@ -207,7 +209,6 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
           </div>
         </motion.div>
 
-        {/* Logout Button */}
         <motion.button
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

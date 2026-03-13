@@ -19,6 +19,12 @@ import EmployerTaskManagement from './components/employer/EmployerTaskManagement
 import TeamLeadTaskManagement from './components/teamlead/TeamLeadTaskManagement';
 import { demoEmployees, demoLeaveRequests, demoAttendance } from './data/demoData';
 
+
+import SalesDashboard from './components/sales/SalesDashboard';
+import PerformanceLocking from './components/management/PerformanceLocking';
+import TargetAdjustment from './components/teamlead/TargetAdjustment';
+// import TaskSubmissionModal from './components/common/TaskSubmissionModal';
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface LeaveType {
@@ -117,9 +123,9 @@ function AppContent() {
     );
   }
 
-if (!user) {
-  return <LoginPage onLogin={handleLoginSuccess} />;
-}
+  if (!user) {
+    return <LoginPage onLogin={handleLoginSuccess} />;
+  }
 
   const empIdString = user.empId?.toString() || '1';
   const empName = user.name;
@@ -181,6 +187,31 @@ if (!user) {
               currentUser={currentUserForTask}
             />
           );
+        case 'sales':
+          return (
+            <SalesDashboard
+              currentUser={{
+                id: user.id,
+                empId: user.employeeId ?? user.empId ?? `EMP${user.id}`,
+                name: user.name,
+                department: user.department ?? '',
+                position: user.position ?? '',
+                role: 'employer',
+              }}
+            />
+          );
+
+        case 'locking':
+          return (
+            <PerformanceLocking
+              currentUser={{
+                id: user.id,
+                name: user.name,
+                role: 'employer',
+              }}
+            />
+          );
+
         default:
           return null;
       }
@@ -209,6 +240,17 @@ if (!user) {
               employee={employeeObj}
               leaveRequests={employeeLeaves}
               setLeaveRequests={dummySet}
+            />
+          );
+
+          case 'adjust-targets':
+          return (
+            <TargetAdjustment
+              currentUser={{
+                id: user.id,
+                name: user.name,
+                role: 'teamlead',
+              }}
             />
           );
         case 'my-attendance':

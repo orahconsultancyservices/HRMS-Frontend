@@ -1,0 +1,55 @@
+# Alternative Dockerfile for Node.js serving (without Nginx)
+# Use this if you prefer Node.js instead of Nginx
+
+FROM node:18-alpine AS base
+
+# Install dependencies only when needed
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci --only=production
+
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Production image, copy all the files and run the app
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Create a non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
+
+# Copy the public folder
+COPY --from=builder /app/public ./public
+
+# Copy the build folder
+COPY --from=builder /app/dist ./dist
+
+# Copy package.json and package-lock.json
+COPY package.json package-lock.json* ./
+
+# Install a simple HTTP server
+RUN npm install -g serve
+
+# Change ownership of the app directory
+RUN chown -R nextjs:nodejs /app
+
+# Switch to non-root user
+USER nextjs
+
+# Expose port 8080 for Cloud Run
+EXPOSE 8080
+
+# Start the server
+CMD ["serve", "-s", "dist", "-l", "8080"]

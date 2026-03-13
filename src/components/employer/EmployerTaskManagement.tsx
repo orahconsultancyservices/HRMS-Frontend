@@ -686,7 +686,7 @@ const EmployerTaskManagement = ({ currentUser }: TaskManagementProps) => {
            DASHBOARD VIEW
          ══════════════════════════════════════════════════════════════════════ */}
       {activeView === 'dashboard' && (
-        <motion.div variants={iv} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+     <motion.div key="dashboard" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="space-y-5">
 
           {/* Left: Team Progress */}
           <div className="lg:col-span-2 bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
@@ -903,7 +903,7 @@ const EmployerTaskManagement = ({ currentUser }: TaskManagementProps) => {
            TASKS VIEW
          ══════════════════════════════════════════════════════════════════════ */}
       {activeView === 'tasks' && (
-        <motion.div variants={iv} className="space-y-4">
+        <motion.div key="tasks" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="space-y-5">
           {/* Filters Bar */}
           <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
             <div className="flex flex-wrap gap-3 items-center">
@@ -1161,10 +1161,10 @@ const EmployerTaskManagement = ({ currentUser }: TaskManagementProps) => {
            EMPLOYEES / TEAM VIEW
          ══════════════════════════════════════════════════════════════════════ */}
       {activeView === 'employees' && (
-        <motion.div variants={iv} className="space-y-5">
+       <motion.div key="tasks" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="space-y-5">
           {/* Department filter */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-gray-500 font-medium">Filter by dept:</span>
+            <span className="text-sm text-gray-500 font-medemployeesium">Filter by dept:</span>
             {['all', ...departments].map(dept => (
               <button key={dept} onClick={() => setFilterDept(dept)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
@@ -1273,7 +1273,7 @@ const EmployerTaskManagement = ({ currentUser }: TaskManagementProps) => {
            DESIGNATIONS VIEW
          ══════════════════════════════════════════════════════════════════════ */}
       {activeView === 'designations' && (
-        <motion.div variants={iv} className="space-y-5">
+        <motion.div key="designations" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {Object.entries(DESIGNATION_KPI_TEMPLATES).map(([key, tmpl]) => (
               <div key={key} className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
@@ -1332,7 +1332,7 @@ const EmployerTaskManagement = ({ currentUser }: TaskManagementProps) => {
            HISTORY VIEW
          ══════════════════════════════════════════════════════════════════════ */}
       {activeView === 'history' && (
-        <motion.div variants={iv} className="space-y-5">
+      <motion.div key="history" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="space-y-5">
           {/* Filters */}
           <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-wrap gap-4 items-center">
             <div>

@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 
 import { useEmployeeTasks, useSubmitTaskProgress } from '../../hooks/useTasks';
+import TaskSubmissionModal from '../common/TaskSubmissionModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -143,6 +144,7 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'completed' | 'overdue'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [submissionForm, setSubmissionForm] = useState({ count: 0, notes: '', profileComment: '' });
+  const [submittingTask, setSubmittingTask] = useState<Task | null>(null);
   // const [expandedTask, setExpandedTask] = useState<number | null>(null);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
@@ -315,7 +317,7 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
 
       {/* ─────────────────────── TASKS VIEW ────────────────────────────────── */}
       {activeView === 'tasks' && (
-        <motion.div variants={iv} className="space-y-5">
+       <motion.div key="tasks" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="space-y-5">
           {/* Today's Quick View */}
           {todayTasks.length > 0 && (
             <div className="bg-gradient-to-r from-[#6B8DA2] to-[#7A9DB2] rounded-2xl p-5 text-white">
@@ -517,7 +519,7 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
 
       {/* ─────────────────────── SUBMISSION HISTORY VIEW ───────────────────── */}
       {activeView === 'history' && (
-        <motion.div variants={iv} className="space-y-4">
+       <motion.div key="history" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="space-y-5">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <h3 className="font-bold text-gray-800">Submission History</h3>
@@ -583,7 +585,7 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
 
       {/* ─────────────────────── ANALYTICS VIEW ────────────────────────────── */}
       {activeView === 'analytics' && (
-        <motion.div variants={iv} className="space-y-5">
+          <motion.div key="analytics" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="space-y-5">
           {/* By Type */}
           <div className="grid grid-cols-3 gap-4">
             {analyticsData.byType.map(bt => (
@@ -678,114 +680,18 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
       {/* ════════════════════════════════════════════════════════════════════
            SUBMIT MODAL
          ════════════════════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {showSubmitModal && selectedTask && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <Plus className="w-6 h-6 text-[#6B8DA2]" /> Submit Progress
-                </h3>
-                <button onClick={() => { setShowSubmitModal(false); setSubmissionForm({ count: 0, notes: '', profileComment: '' }); }}
-                  className="p-1.5 hover:bg-gray-100 rounded-lg cursor-pointer">
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                {/* Task info */}
-                <div className={`p-4 bg-gradient-to-r ${getCatConfig(selectedTask.category).gradient} rounded-xl text-white`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-white/70 text-xs uppercase">{selectedTask.type} · {getCatConfig(selectedTask.category).label}</p>
-                      <p className="font-bold text-lg">{selectedTask.title}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-3xl font-bold">{getProgress(selectedTask).toFixed(0)}%</p>
-                      <p className="text-white/70 text-xs">{selectedTask.achieved}/{selectedTask.target}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Profile comment (for recruiter tasks) */}
-                {needsProfileComment(selectedTask) && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-                    <label className="block text-sm font-semibold text-amber-800 mb-1.5 flex items-center gap-1.5">
-                      <MessageSquare className="w-4 h-4" /> Profile / Position (Required)
-                    </label>
-                    <input type="text" value={submissionForm.profileComment}
-                      onChange={e => setSubmissionForm(f => ({ ...f, profileComment: e.target.value }))}
-                      placeholder="e.g. Senior React Developer – ABC Corp (LinkedIn)"
-                      className="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm focus:outline-none focus:border-amber-400 bg-white" />
-                    <p className="text-xs text-amber-600 mt-1">Specify which profile/position/company this relates to</p>
-                  </div>
-                )}
-
-                {/* Count */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Count – {selectedTask.unit} completed today *
-                  </label>
-                  <input type="number" min="1"
-                    value={submissionForm.count || ''}
-                    onChange={e => setSubmissionForm(f => ({ ...f, count: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-lg font-semibold focus:outline-none focus:border-[#6B8DA2] focus:ring-2 focus:ring-[#6B8DA2]/20"
-                    placeholder="0" />
-                  <p className="text-xs text-gray-400 mt-1">
-                    Remaining: {Math.max(0, selectedTask.target - selectedTask.achieved)} {selectedTask.unit}
-                  </p>
-                </div>
-
-                {/* Notes */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Additional Notes</label>
-                  <textarea rows={2} value={submissionForm.notes}
-                    onChange={e => setSubmissionForm(f => ({ ...f, notes: e.target.value }))}
-                    placeholder="Any additional context…"
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#6B8DA2]" />
-                </div>
-
-                {/* Live preview */}
-                {submissionForm.count > 0 && (
-                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                    className="p-3 bg-green-50 border border-green-200 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-green-700 font-medium">New total:</span>
-                      <span className="text-lg font-bold text-green-700">
-                        {selectedTask.achieved + submissionForm.count} / {selectedTask.target} {selectedTask.unit}
-                      </span>
-                    </div>
-                    <div className="w-full bg-green-200 rounded-full h-2 mt-2">
-                      <div className="bg-green-500 h-2 rounded-full" style={{
-                        width: `${Math.min(((selectedTask.achieved + submissionForm.count) / selectedTask.target) * 100, 100)}%`
-                      }} />
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Buttons */}
-                <div className="flex gap-3 pt-2">
-                  <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                    onClick={handleSubmitProgress} disabled={submitMutation.isPending || submissionForm.count <= 0}
-                    className="flex-1 py-3 bg-gradient-to-r from-[#6B8DA2] to-[#F5A42C] text-white rounded-xl font-semibold hover:shadow-lg transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
-                    {submitMutation.isPending ? (
-                      <><div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" /> Submitting…</>
-                    ) : 'Submit Progress'}
-                  </motion.button>
-                  <button onClick={() => { setShowSubmitModal(false); setSubmissionForm({ count: 0, notes: '', profileComment: '' }); }}
-                    className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition cursor-pointer">
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+   {showSubmitModal && selectedTask && (
+    <TaskSubmissionModal
+      task={selectedTask}
+      employeeId={employee.id ?? 0}
+      onClose={() => { setShowSubmitModal(false); setSelectedTask(null); }}
+      onSuccess={() => {
+        setShowSubmitModal(false);
+        setSelectedTask(null);
+        refetch();
+      }}
+    />
+  )}
 
       {/* ════════════════════════════════════════════════════════════════════
            TASK DETAILS MODAL

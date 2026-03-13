@@ -190,4 +190,20 @@ export const taskApi = {
     const response = await api.get('/tasks/team/performance', { params });
     return response.data;
   },
+
+  // Performance endpoints
+  getMonthlyPerformance: async (employeeId: number, params?: any) => {
+    const response = await api.get(`/performance/employees/${employeeId}/monthly-performance`, { params });
+    return response.data;
+  },
+
+  getTeamPerformanceSummary: async (params?: any) => {
+    const response = await api.get('/performance/team/performance-summary', { params });
+    return response.data;
+  },
+
+  getCompanyPerformance: async (params?: any) => {
+    const response = await api.get('/performance/company/performance', { params });
+    return response.data;
+  },
 };

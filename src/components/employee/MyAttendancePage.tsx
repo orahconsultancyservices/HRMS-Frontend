@@ -237,49 +237,65 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
   };
 
 
-  const handleExportAttendance = async () => {
-    setIsExporting(true);
+const handleExportAttendance = async () => {
+  setIsExporting(true);
+  try {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+    // Calculate the actual target month accounting for navigation
+    // selectedMonth is an offset (0 = current, -1 = previous, etc.)
+    const baseDate = new Date(currentYear, currentMonth + selectedMonth, 1);
+    const targetMonth = baseDate.getMonth() + 1; // 1-12
+    const targetYear = baseDate.getFullYear();
+
+    const url = `${API_URL}/attendance/employee/${employeeIdNumber}/export/monthly?month=${targetMonth}&year=${targetYear}`;
+    const filename = `my-attendance-${targetYear}-${String(targetMonth).padStart(2, '0')}.xlsx`;
+
+    console.log('📥 Exporting monthly attendance:', { url, filename });
+
+    // Build headers — grab auth token from localStorage the same way api.ts does
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-      
-      // Only monthly export is allowed
-      const targetMonth = currentMonth + selectedMonth + 1;
-      const targetYear = currentYear;
-      const url = `${API_URL}/attendance/employee/${employeeIdNumber}/export/monthly?month=${targetMonth}&year=${targetYear}`;
-      const filename = `monthly-attendance-${targetYear}-${String(targetMonth).padStart(2, '0')}.xlsx`;
-
-      console.log('📥 Exporting monthly attendance:', { url, filename });
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
+      const authData = localStorage.getItem('auth');
+      if (authData) {
+        const auth = JSON.parse(authData);
+        if (auth.user) {
+          headers['x-user'] = JSON.stringify(auth.user);
         }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to export attendance');
       }
-
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(downloadUrl);
-      document.body.removeChild(a);
-
-      showNotificationMessage('Monthly attendance exported successfully!', 'success');
-    } catch (error: any) {
-      console.error('❌ Error exporting attendance:', error);
-      showNotificationMessage(error.message || 'Failed to export attendance', 'error');
-    } finally {
-      setIsExporting(false);
+    } catch (_e) {
+      // if auth parse fails, continue without the header
     }
-  };
+
+    const response = await fetch(url, { method: 'GET', headers });
+
+    if (!response.ok) {
+      // Try to parse error message from backend
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Export failed (${response.status})`);
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(downloadUrl);
+    document.body.removeChild(a);
+
+    showNotificationMessage('Monthly attendance exported successfully!', 'success');
+  } catch (error: any) {
+    console.error('❌ Error exporting attendance:', error);
+    showNotificationMessage(error.message || 'Failed to export attendance', 'error');
+  } finally {
+    setIsExporting(false);
+  }
+};
 
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
