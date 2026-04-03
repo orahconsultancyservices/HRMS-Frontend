@@ -1,7 +1,8 @@
 // src/components/management/PerformanceLocking.tsx
 // Month-End Performance Locking System — Admin UI
+// FIXED: Fetches real lock status from DB on mount/month change; handles 400 "already locked" gracefully
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Lock, CheckCircle, Clock,
@@ -37,6 +38,8 @@ interface LockRecord {
     status: string;
   }>;
   remarks?: string;
+  // DB record id when it exists
+  perfRecordId?: number;
 }
 
 interface PerformanceLockingProps {
@@ -78,7 +81,12 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear]   = useState(now.getFullYear());
+
+  // lockRecords is the single source of truth for UI state.
+  // It is populated from DB on mount/month-change and updated optimistically on lock.
   const [lockRecords, setLockRecords]     = useState<Record<string, LockRecord>>({});
+  const [isFetchingLocks, setIsFetchingLocks] = useState(false);
+
   const [expandedEmpId, setExpandedEmpId] = useState<number | null>(null);
   const [confirmLock, setConfirmLock]     = useState<{ empId: number; name: string } | null>(null);
   const [confirmUnlockAll, setConfirmUnlockAll] = useState(false);
@@ -86,6 +94,7 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
   const [filter, setFilter]               = useState<'all' | 'locked' | 'unlocked'>('all');
   const [searchTerm, setSearchTerm]       = useState('');
   const [isRefreshing, setIsRefreshing]   = useState(false);
+  const [lockingEmpId, setLockingEmpId]   = useState<number | null>(null);
 
   const { data: rawEmployees = [], refetch: refetchEmployees } = useEmployees();
   const { data: tasksRaw = [], refetch: refetchTasks }         = useTasks();
@@ -109,7 +118,7 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
     return raw;
   }, [tasksRaw]);
 
-  // Build per-employee performance snapshot for selected month
+  // ── Build per-employee performance snapshot from tasks ───────────────────
   const performanceByEmp = useMemo(() => {
     const map: Record<number, { totalTarget: number; totalAchieved: number; tasks: any[] }> = {};
     const start = new Date(selectedYear, selectedMonth - 1, 1);
@@ -126,7 +135,76 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
     return map;
   }, [allTasks, selectedMonth, selectedYear]);
 
-  const getRecord = (empId: number): LockRecord => {
+  // ── Fetch lock status from DB for all employees for the selected month ───
+  const fetchLockStatuses = useCallback(async (empList: typeof employees) => {
+    if (empList.length === 0) return;
+    setIsFetchingLocks(true);
+    try {
+      const results = await Promise.allSettled(
+        empList.map(emp =>
+          api.get(`/performance/employees/${emp.id}/monthly-performance`, {
+            params: { year: selectedYear, month: selectedMonth }
+          })
+        )
+      );
+
+      setLockRecords(prev => {
+        const next = { ...prev };
+        results.forEach((result, idx) => {
+          const emp = empList[idx];
+          const key = `${emp.id}_${selectedYear}_${selectedMonth}`;
+          const perf = performanceByEmp[emp.id] ?? { totalTarget: 0, totalAchieved: 0, tasks: [] };
+          const achievement = perf.totalTarget > 0 ? (perf.totalAchieved / perf.totalTarget) * 100 : 0;
+
+          if (result.status === 'fulfilled') {
+            const records = result.value?.data?.data ?? result.value?.data ?? [];
+            const perfRecord = Array.isArray(records) ? records[0] : records;
+
+            if (perfRecord) {
+              // DB record exists — use its lock status as ground truth
+              next[key] = {
+                employeeId:   emp.id,
+                year:         selectedYear,
+                month:        selectedMonth,
+                locked:       perfRecord.isLocked ?? false,
+                lockedAt:     perfRecord.lockedAt ?? undefined,
+                lockedBy:     perfRecord.locker
+                                ? `${perfRecord.locker.firstName ?? ''} ${perfRecord.locker.lastName ?? ''}`.trim()
+                                : undefined,
+                achievement:  perfRecord.achievementPercent ?? achievement,
+                totalTarget:  perfRecord.totalTarget  ?? perf.totalTarget,
+                totalAchieved:perfRecord.totalAchieved ?? perf.totalAchieved,
+                tasks:        perf.tasks,
+                remarks:      perfRecord.teamLeadRemarks ?? undefined,
+                perfRecordId: perfRecord.id,
+              };
+            } else {
+              // No DB record yet — not locked, derive from tasks
+              next[key] = {
+                employeeId: emp.id, year: selectedYear, month: selectedMonth,
+                locked: false, achievement, ...perf, perfRecordId: undefined,
+              };
+            }
+          }
+          // On fetch error just leave whatever is already in state (or nothing)
+        });
+        return next;
+      });
+    } finally {
+      setIsFetchingLocks(false);
+    }
+  }, [selectedYear, selectedMonth, performanceByEmp]);
+
+  // Re-fetch whenever employees or month/year changes
+  useEffect(() => {
+    if (employees.length > 0) {
+      fetchLockStatuses(employees);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employees.length, selectedMonth, selectedYear]);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const getRecord = useCallback((empId: number): LockRecord => {
     const key = `${empId}_${selectedYear}_${selectedMonth}`;
     if (lockRecords[key]) return lockRecords[key];
     const perf = performanceByEmp[empId] ?? { totalTarget: 0, totalAchieved: 0, tasks: [] };
@@ -135,38 +213,70 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
       employeeId: empId, year: selectedYear, month: selectedMonth,
       locked: false, achievement, ...perf,
     };
-  };
+  }, [lockRecords, selectedYear, selectedMonth, performanceByEmp]);
 
+  // ── Lock a single employee ────────────────────────────────────────────────
   const handleLock = async (empId: number) => {
+    setLockingEmpId(empId);
+    setConfirmLock(null);
+
+    const key = `${empId}_${selectedYear}_${selectedMonth}`;
+    let perfRecordId = lockRecords[key]?.perfRecordId;
+
+    // Step 1: generate snapshot — 400 "already exists" is fine, just continue
     try {
-      // Generate snapshot
       await api.post('/performance/monthly-performance/generate', {
         employeeId: empId,
         year: selectedYear,
         month: selectedMonth,
       });
-    } catch {
-      // snapshot may already exist — continue
-    }
-
-    try {
-      // Fetch the performance record ID
-      const perfRecords = await api.get(
-        `/performance/employees/${empId}/monthly-performance`,
-        { params: { year: selectedYear, month: selectedMonth } }
-      );
-      const perfId = (perfRecords.data?.data ?? perfRecords.data)?.[0]?.id;
-      if (perfId) {
-        await api.put(`/performance/monthly-performance/${perfId}/lock`, {
-          lockedBy: currentUser.id,
-        });
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? '';
+      if (!msg.toLowerCase().includes('already exists')) {
+        console.error('Snapshot generation failed unexpectedly:', err);
+        setLockingEmpId(null);
+        return;
       }
-    } catch (err) {
-      console.error('Lock failed:', err);
+      // "already exists" is expected — fall through
     }
 
-    // Update local state optimistically
-    const key = `${empId}_${selectedYear}_${selectedMonth}`;
+    // Step 2: fetch the record ID if we don't have it yet
+    if (!perfRecordId) {
+      try {
+        const res = await api.get(`/performance/employees/${empId}/monthly-performance`, {
+          params: { year: selectedYear, month: selectedMonth }
+        });
+        const records = res.data?.data ?? res.data ?? [];
+        perfRecordId = Array.isArray(records) ? records[0]?.id : records?.id;
+      } catch (err) {
+        console.error('Failed to fetch performance record ID:', err);
+        setLockingEmpId(null);
+        return;
+      }
+    }
+
+    if (!perfRecordId) {
+      console.error('No performance record ID found after generate');
+      setLockingEmpId(null);
+      return;
+    }
+
+    // Step 3: lock — 400 "already locked" is fine, treat as success
+    try {
+      await api.put(`/performance/monthly-performance/${perfRecordId}/lock`, {
+        lockedBy: currentUser.id,
+      });
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? '';
+      if (!msg.toLowerCase().includes('already locked')) {
+        console.error('Lock failed:', err);
+        setLockingEmpId(null);
+        return;
+      }
+      // "already locked" — still update UI to show locked state
+    }
+
+    // Step 4: update local state to reflect locked
     setLockRecords(prev => ({
       ...prev,
       [key]: {
@@ -174,38 +284,33 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
         locked: true,
         lockedAt: new Date().toISOString(),
         lockedBy: currentUser.name,
+        perfRecordId,
       },
     }));
-    setConfirmLock(null);
+
+    setLockingEmpId(null);
   };
 
+  // ── Bulk lock ─────────────────────────────────────────────────────────────
   const handleBulkLock = async () => {
     setBulkLocking(true);
-    await new Promise(r => setTimeout(r, 600));
-    const updates: Record<string, LockRecord> = { ...lockRecords };
-    employees.forEach(emp => {
-      const key = `${emp.id}_${selectedYear}_${selectedMonth}`;
-      if (!updates[key]?.locked) {
-        updates[key] = {
-          ...getRecord(emp.id),
-          locked: true,
-          lockedAt: new Date().toISOString(),
-          lockedBy: currentUser.name,
-        };
-      }
-    });
-    setLockRecords(updates);
+    const unlockedEmps = employees.filter(emp => !getRecord(emp.id).locked);
+
+    await Promise.allSettled(unlockedEmps.map(emp => handleLock(emp.id)));
+
     setBulkLocking(false);
     setConfirmUnlockAll(false);
   };
 
+  // ── Refresh ───────────────────────────────────────────────────────────────
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([refetchEmployees(), refetchTasks()]);
+    await fetchLockStatuses(employees);
     setIsRefreshing(false);
   };
 
-  // Filtered & searched employees
+  // ── Filtered employees ────────────────────────────────────────────────────
   const filteredEmployees = useMemo(() => {
     return employees.filter(emp => {
       const rec = getRecord(emp.id);
@@ -242,13 +347,14 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
           <p className="text-gray-400 text-sm ml-12">Month-end data immutability · Locked records are read-only forever</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={handleRefresh} disabled={isRefreshing}
+          <button onClick={handleRefresh} disabled={isRefreshing || isFetchingLocks}
             className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 transition cursor-pointer disabled:opacity-50">
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
+            <RefreshCw className={`w-4 h-4 ${isRefreshing || isFetchingLocks ? 'animate-spin' : ''}`} />
+            {isFetchingLocks ? 'Loading…' : 'Refresh'}
           </button>
           {unlockedCount > 0 && (
             <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-              onClick={() => setConfirmUnlockAll(true)} disabled={bulkLocking}
+              onClick={() => setConfirmUnlockAll(true)} disabled={bulkLocking || isFetchingLocks}
               className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-rose-500 to-pink-600 text-white rounded-xl text-sm font-semibold hover:shadow-lg transition cursor-pointer disabled:opacity-50">
               <Shield className="w-4 h-4" />
               Lock All ({unlockedCount})
@@ -274,11 +380,11 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
         <div className="flex flex-wrap gap-3 items-center">
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-gray-400" />
-            <select value={selectedMonth} onChange={e => setSelectedMonth(parseInt(e.target.value))}
+            <select value={selectedMonth} onChange={e => { setSelectedMonth(parseInt(e.target.value)); }}
               className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-rose-400 cursor-pointer">
               {MONTHS.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
             </select>
-            <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))}
+            <select value={selectedYear} onChange={e => { setSelectedYear(parseInt(e.target.value)); }}
               className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-rose-400 cursor-pointer">
               {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
@@ -330,9 +436,16 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
             <BarChart3 className="w-5 h-5 text-rose-500" />
             {MONTHS[selectedMonth - 1]} {selectedYear} — Performance Records
           </h3>
-          <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-lg">
-            {filteredEmployees.length} employees
-          </span>
+          <div className="flex items-center gap-2">
+            {isFetchingLocks && (
+              <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                <RefreshCw className="w-3 h-3 animate-spin" /> Loading lock status…
+              </span>
+            )}
+            <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-lg">
+              {filteredEmployees.length} employees
+            </span>
+          </div>
         </div>
 
         <div className="divide-y divide-gray-50">
@@ -342,10 +455,11 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
               <p className="text-gray-400 text-sm">No employees match your filters</p>
             </div>
           ) : filteredEmployees.map(emp => {
-            const rec = getRecord(emp.id);
-            const pct = Math.round(rec.achievement);
+            const rec       = getRecord(emp.id);
+            const pct       = Math.round(rec.achievement);
             const { grade, color: gradeColor } = getGrade(pct);
-            const isExpanded = expandedEmpId === emp.id;
+            const isExpanded   = expandedEmpId === emp.id;
+            const isLocking    = lockingEmpId === emp.id;
 
             return (
               <div key={emp.id} className={rec.locked ? 'bg-gray-50/50' : ''}>
@@ -367,7 +481,8 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
                       {rec.locked && (
                         <span className="flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
                           <Lock className="w-2.5 h-2.5" /> Locked
-                          {rec.lockedAt && ` · ${new Date(rec.lockedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                          {rec.lockedAt && ` · ${new Date(rec.lockedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                          {rec.lockedBy && ` · by ${rec.lockedBy}`}
                         </span>
                       )}
                     </div>
@@ -397,7 +512,14 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
                       className="p-2 hover:bg-gray-100 rounded-xl transition cursor-pointer text-gray-400">
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
-                    {!rec.locked ? (
+
+                    {isLocking ? (
+                      // Spinner while locking this employee
+                      <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 text-gray-400 border border-gray-200 rounded-xl text-xs font-semibold">
+                        <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
+                        Locking…
+                      </div>
+                    ) : !rec.locked ? (
                       <button onClick={() => setConfirmLock({ empId: emp.id, name: emp.name })}
                         className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold hover:bg-rose-100 transition cursor-pointer">
                         <Lock className="w-3.5 h-3.5" /> Lock
@@ -424,7 +546,8 @@ const PerformanceLocking = ({ currentUser }: PerformanceLockingProps) => {
                           {rec.locked && (
                             <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
                               <Shield className="w-3 h-3" />
-                              Immutable snapshot — locked by {rec.lockedBy}
+                              Immutable snapshot — locked{rec.lockedBy ? ` by ${rec.lockedBy}` : ''}
+                              {rec.lockedAt ? ` on ${new Date(rec.lockedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
                             </div>
                           )}
                         </div>

@@ -180,7 +180,7 @@ const SalesDashboard = ({ currentUser }: SalesDashboardProps) => {
     const [deadline, setDeadline] = useState('');
     const [isAssigning, setIsAssigning] = useState(false);
     // FIX 1: added 'all' to the union type so filterPeriod === 'all' comparisons are valid
-    const [filterPeriod, setFilterPeriod] = useState<'all' | 'daily' | 'weekly' | 'monthly'>('monthly');
+    const [filterPeriod, setFilterPeriod] = useState<'all' | 'daily' | 'weekly' | 'monthly'>('all');
 
     const tasks: any[] = useMemo(() => {
         const raw = Array.isArray(tasksRaw) ? tasksRaw : (tasksRaw as any)?.data || [];
