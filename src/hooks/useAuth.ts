@@ -1,5 +1,5 @@
 // src/hooks/useAuth.ts
-// UPDATED - Added teamlead role support
+// UPDATED - Added manager role + access permissions support
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authApi } from '../services/api';
@@ -9,24 +9,41 @@ interface LoginCredentials {
   password: string;
 }
 
-interface User {
+export interface AccessPermission {
+  id: number;
+  targetType: 'department' | 'team';
+  targetId: number;
+  targetName: string;
+  accessLevel: 'view' | 'manage';
+  isActive?: boolean;
+}
+
+export interface User {
   id: number;
   empId: string;
   employeeId?: string;
   name: string;
   email: string;
-  role: 'employer' | 'employee' | 'teamlead';
+  role: 'employer' | 'employee' | 'teamlead' | 'manager' | 'hr';
   department?: string;
+  departmentId?: number;
   position?: string;
   avatar?: string;
   joinDate?: string;
+  reportTo?: number;
+  managesDepartment?: number;
   isTeamLead?: boolean;
+  // Cross-department/team permissions granted by admin
+  accessPermissions?: AccessPermission[];
   leaveBalance?: {
     casual: number;
     sick: number;
     earned: number;
   };
 }
+
+const VALID_ROLES = ['employer', 'employee', 'teamlead', 'manager', 'hr'] as const;
+type ValidRole = typeof VALID_ROLES[number];
 
 export const authKeys = {
   all:     ['auth'] as const,
@@ -50,10 +67,10 @@ export const useCurrentUser = () => {
               id:         session.id || session.empId,
               empId:      session.empId || session.id?.toString(),
               employeeId: session.employeeId || session.empId,
-              // Ensure role is one of the three valid values
-              role: (['employer', 'employee', 'teamlead'] as const).includes(session.role)
-                ? session.role
+              role: (VALID_ROLES as readonly string[]).includes(session.role)
+                ? (session.role as ValidRole)
                 : 'employee',
+              accessPermissions: session.accessPermissions || [],
             };
           }
         } catch {
@@ -118,4 +135,24 @@ export const useChangePassword = () => {
       return response.data;
     },
   });
+};
+
+// Helper: does user have access to a department?
+export const userCanAccessDepartment = (user: User, departmentName: string): boolean => {
+  if (user.role === 'employer' || user.role === 'hr') return true;
+  if (user.department === departmentName) return true;
+  if (!user.accessPermissions) return false;
+  return user.accessPermissions.some(
+    p => p.targetType === 'department' && p.targetName === departmentName && p.isActive !== false
+  );
+};
+
+// Helper: get all department names user can access
+export const getUserAccessibleDepartments = (user: User, allDepartments: string[]): string[] => {
+  if (user.role === 'employer' || user.role === 'hr') return allDepartments;
+  const ownDept = user.department ? [user.department] : [];
+  const permDepts = (user.accessPermissions || [])
+    .filter(p => p.targetType === 'department')
+    .map(p => p.targetName);
+  return [...new Set([...ownDept, ...permDepts])];
 };

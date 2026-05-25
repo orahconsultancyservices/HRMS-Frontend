@@ -85,12 +85,8 @@ interface FormState {
 type DateRange = [Date | null, Date | null];
 
 const DEFAULT_LEAVE_TYPES: LeaveType[] = [
-  { id: 1, name: 'Casual Leave', code: 'CL', description: 'Casual leaves for personal work', color: '#3B82F6', isActive: true, createdAt: '2024-01-01' },
-  { id: 2, name: 'Sick Leave', code: 'SL', description: 'Medical leaves for illness', color: '#F97316', isActive: true, createdAt: '2024-01-01' },
-  { id: 3, name: 'Earned Leave', code: 'EL', description: 'Privilege leaves earned over time', color: '#8B5CF6', isActive: true, createdAt: '2024-01-01' },
-  { id: 4, name: 'Paid Leave', code: 'PL', description: 'Paid leaves from balance', color: '#10B981', isActive: true, createdAt: '2024-01-01' },
-  { id: 5, name: 'Unpaid Leave', code: 'UL', description: 'Leave without pay', color: '#EF4444', isActive: true, createdAt: '2024-01-01' },
-  { id: 6, name: 'Half Day', code: 'HD', description: 'Half day leave', color: '#8B5CF6', isActive: true, createdAt: '2024-01-01' },
+  { id: 1, name: 'Paid',   code: 'PL', description: 'Paid leaves from monthly accrual', color: '#10B981', isActive: true, createdAt: '2024-01-01' },
+  { id: 2, name: 'Unpaid', code: 'UL', description: 'Leave without pay',                 color: '#EF4444', isActive: true, createdAt: '2024-01-01' },
 ];
 
 const LeavesPage = ({
@@ -321,13 +317,9 @@ const LeavesPage = ({
 
     // Fallback class names
     switch (typeName) {
-      case 'Paid': return 'bg-green-100 text-green-700 border-green-200';
+      case 'Paid':   return 'bg-green-100 text-green-700 border-green-200';
       case 'Unpaid': return 'bg-red-100 text-red-700 border-red-200';
-      case 'Half Day': return 'bg-purple-100 text-purple-700 border-purple-200';
-      case 'Casual': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'Sick': return 'bg-orange-100 text-orange-700 border-orange-200';
-      case 'Earned': return 'bg-indigo-100 text-indigo-700 border-indigo-200';
-      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+      default:       return 'bg-gray-100 text-gray-700 border-gray-200';
     }
   };
 

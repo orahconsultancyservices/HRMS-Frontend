@@ -1,6 +1,6 @@
 // src/hooks/useEmployees.ts - ENHANCED VERSION
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { employeeApi } from '../services/api';
+import { employeeApi, departmentApi } from '../services/api';
 
 // Employee interface
 export interface Employee {
@@ -21,6 +21,10 @@ export interface Employee {
   emergencyContact?: string;
   avatar?: string;
   isActive: boolean;
+  role?: string;
+  departmentId?: number;
+  reportTo?: number | null;
+  managesDepartment?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -233,28 +237,50 @@ export const useDeleteEmployee = () => {
 /**
  * Hook to fetch all departments
  */
+/**
+ * Returns the list of active department names as string[].
+ *
+ * Source priority:
+ *   1. Department table (via departmentApi.getAll) — authoritative; updated whenever
+ *      a department is created/renamed in Organization Management.
+ *   2. Fallback: legacy /employees/departments endpoint (reads Employee.department
+ *      strings) — used only when the Department table is empty.
+ *
+ * Both the Organization Management and Employee Management pages share the same
+ * ['departments'] query key, so creating a department in one view automatically
+ * refreshes the dropdown in the other.
+ */
 export const useDepartments = () => {
   return useQuery({
     queryKey: ['departments'],
-    queryFn: async () => {
+    queryFn: async (): Promise<string[]> => {
       try {
-        console.log('📥 Fetching departments...');
-        const response = await employeeApi.getDepartments();
-        console.log('📊 Departments response:', response);
+        // ── Primary: read from the Department table ───────────────────────
+        const res = await departmentApi.getAll();
+        const rows: { name: string; isActive?: boolean }[] =
+          Array.isArray(res?.data) ? res.data :
+          Array.isArray(res)       ? res       : [];
 
-        if (response && response.data) {
-          return response.data;
-        } else if (Array.isArray(response)) {
-          return response;
-        }
+        const fromTable = rows
+          .filter((d) => d.isActive !== false && d.name?.trim())
+          .map((d) => d.name.trim());
 
-        return [];
+        if (fromTable.length > 0) return fromTable;
+
+        // ── Fallback: read department strings from employee records ───────
+        // (handles legacy setups where the Department table is still empty)
+        const fallback = await employeeApi.getDepartments();
+        const legacyList: string[] =
+          Array.isArray(fallback?.data) ? fallback.data :
+          Array.isArray(fallback)       ? fallback       : [];
+
+        return legacyList.filter((d: string) => d?.trim());
       } catch (error) {
         console.error('❌ Error fetching departments:', error);
         return [];
       }
     },
-    staleTime: 10 * 60 * 1000, // 10 minutes (departments change less frequently)
+    staleTime: 2 * 60 * 1000, // 2 min — short so a new dept shows up quickly
   });
 };
 

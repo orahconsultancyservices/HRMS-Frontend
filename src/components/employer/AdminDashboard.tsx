@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
+import { departmentApi } from '../../services/api';
 
 interface DefaultKPI {
   id: number;
@@ -86,8 +87,8 @@ export default function AdminDashboard({ currentUser }: AdminDashboardProps) {
   const { data: departments = [], isLoading: deptLoading } = useQuery<Department[]>({
     queryKey: ['departments'],
     queryFn: async () => {
-      const res = await axios.get('/api/departments');
-      return res.data.data || [];
+      const res = await departmentApi.getAll();
+      return res?.data ?? [];
     }
   });
 

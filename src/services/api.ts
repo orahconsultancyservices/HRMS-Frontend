@@ -17,15 +17,15 @@ api.interceptors.request.use(
     console.log('API Request:', config.method?.toUpperCase(), config.url, config.data);
     
     try {
-      const authData = localStorage.getItem('auth');
-      if (authData) {
-        const auth = JSON.parse(authData);
-        if (auth.user) {
-          config.headers['x-user'] = JSON.stringify(auth.user);
+      const sessionData = localStorage.getItem('hrms_session');
+      if (sessionData) {
+        const user = JSON.parse(sessionData);
+        if (user?.id) {
+          config.headers['x-user'] = JSON.stringify({ id: user.id, role: user.role });
         }
       }
     } catch (err) {
-      console.warn('Could not parse auth data from localStorage', err);
+      console.warn('Could not parse session from localStorage', err);
     }
     
     return config;
@@ -76,6 +76,11 @@ export const employeeApi = {
   getPositions: () => api.get('/employees/positions'),
   getLeaveBalance: (id: number) => api.get(`/employees/${id}/leave-balance`),
   updateLeaveBalance: (id: number, data: any) => api.put(`/employees/${id}/leave-balance`, data),
+  // One-time backfill: auto-link departmentId for existing employees created before this fix
+  backfillDepartmentIds: async () => {
+    const response = await api.post('/employees/backfill-department-ids');
+    return response.data;
+  },
 };
 
 export const leaveApi = {
@@ -217,17 +222,39 @@ export const performanceApi = {
 };
 
 export const departmentApi = {
-  getAll: (params?: any) => api.get('/departments', { params }),
-  getById: (id: number) => api.get(`/departments/${id}`),
-  create: (data: any) => api.post('/departments', data),
-  update: (id: number, data: any) => api.put(`/departments/${id}`, data),
+  getAll: async (params?: any) => {
+    const response = await api.get('/departments', { params });
+    return response.data;
+  },
+  getById: async (id: number) => {
+    const response = await api.get(`/departments/${id}`);
+    return response.data;
+  },
+  create: async (data: any) => {
+    const response = await api.post('/departments', data);
+    return response.data;
+  },
+  update: async (id: number, data: any) => {
+    const response = await api.put(`/departments/${id}`, data);
+    return response.data;
+  },
   delete: (id: number) => api.delete(`/departments/${id}`),
-  getDesignations: (departmentId?: number) =>
-    api.get('/departments/designations', { params: { departmentId } }),
-  getDefaultKPIs: (designationId: number) =>
-    api.get(`/departments/designations/${designationId}/kpis`),
-  createDefaultKPI: (data: any) => api.post('/departments/kpis', data),
-  updateDefaultKPI: (id: number, data: any) => api.put(`/departments/kpis/${id}`, data),
+  getDesignations: async (departmentId?: number) => {
+    const response = await api.get('/departments/designations', { params: { departmentId } });
+    return response.data;
+  },
+  getDefaultKPIs: async (designationId: number) => {
+    const response = await api.get(`/departments/designations/${designationId}/kpis`);
+    return response.data;
+  },
+  createDefaultKPI: async (data: any) => {
+    const response = await api.post('/departments/kpis', data);
+    return response.data;
+  },
+  updateDefaultKPI: async (id: number, data: any) => {
+    const response = await api.put(`/departments/kpis/${id}`, data);
+    return response.data;
+  },
   deleteDefaultKPI: (id: number) => api.delete(`/departments/kpis/${id}`),
 };
 
@@ -240,6 +267,22 @@ export const taskAssignmentApi = {
     api.put(`/task-assignment/tasks/${taskId}/adjust-target`, data),
   getTeamTasks: (params?: any) =>
     api.get('/task-assignment/team/tasks', { params }),
+};
+
+export const settingsApi = {
+  getAll: async (): Promise<{ success: boolean; data: Record<string, string> }> => {
+    const res = await api.get('/settings');
+    return res.data;
+  },
+  update: async (data: Record<string, string>): Promise<{ success: boolean; data: Record<string, string> }> => {
+    const res = await api.put('/settings', data);
+    return res.data;
+  },
+  reset: async (category?: string): Promise<{ success: boolean; data: Record<string, string> }> => {
+    const path = category ? `/settings/reset/${category}` : '/settings/reset';
+    const res = await api.delete(path);
+    return res.data;
+  },
 };
 
 export default api;

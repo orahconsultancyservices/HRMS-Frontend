@@ -1525,13 +1525,11 @@ const MyLeavesPage = ({ employee, leaveRequests }: MyLeavesProps) => {
                     >
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-1">
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold inline-block ${leave.type === 'Paid' ? 'bg-green-100 text-green-700' :
-                            leave.type === 'Unpaid' ? 'bg-red-100 text-red-700' :
-                              leave.type === 'Casual' ? 'bg-blue-100 text-blue-700' :
-                                leave.type === 'Sick' ? 'bg-orange-100 text-orange-700' :
-                                  leave.type === 'Earned' ? 'bg-purple-100 text-purple-700' :
-                                    'bg-gray-100 text-gray-700'
-                            }`}>
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold inline-block ${
+                            leave.type === 'Paid'   ? 'bg-green-100 text-green-700' :
+                            leave.type === 'Unpaid' ? 'bg-red-100 text-red-700'    :
+                                                      'bg-gray-100 text-gray-700'
+                          }`}>
                             {leave.type}
                           </span>
                           {leave.isHalfDay && (

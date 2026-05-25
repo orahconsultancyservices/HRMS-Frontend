@@ -16,7 +16,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build the application
+# .env.production is included in COPY above.
+# Vite automatically uses .env.production when building,
+# so VITE_API_URL gets baked into the bundle pointing to the GCP backend.
 RUN npm run build:docker
 
 # Production image, copy all the files and run the app

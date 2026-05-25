@@ -3,38 +3,66 @@ import {
   Users, Clock, Gift, LogOut, Home,
   FileText, ChevronRight, BookCheck, Target, Shield, DollarSign,
   Lock,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Building2,
+  Settings,
 } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useCurrentUser, useLogout } from '../../hooks/useAuth';
 import logo from '../../assets/logo.png';
 
-interface SidebarProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
-}
-
-const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
+const Sidebar = () => {
   const { data: user, isLoading } = useCurrentUser();
   const logoutMutation = useLogout();
+  const navigate   = useNavigate();
+  const location   = useLocation();
+
+  // Mirror the same convention used in App.tsx:
+  // "/" → "dashboard", "/employees" → "employees", etc.
+  const activeTab =
+    location.pathname === '/' ? 'dashboard' : location.pathname.replace(/^\//, '');
 
   const employerTabs = [
-    { id: 'dashboard', icon: Home, label: 'Dashboard' },
-    { id: 'employees', icon: Users, label: 'Employees' },
-    { id: 'tasks', icon: Target, label: 'Task Management' },
-    { id: 'sales',   label: 'Sales KPIs',      icon: DollarSign },
-    { id: 'locking', label: 'Lock Performance', icon: Lock },
-    { id: 'leaves', icon: FileText, label: 'Leave Requests' },
-    { id: 'attendance', icon: Clock, label: 'Attendance' },
-    { id: 'birthdays', icon: Gift, label: 'Birthdays' },
+    { id: 'dashboard',    icon: Home,      label: 'Dashboard' },
+    { id: 'employees',    icon: Users,     label: 'Employees' },
+    { id: 'tasks',        icon: Target,    label: 'Task Management' },
+    { id: 'sales',        icon: DollarSign,label: 'Sales KPIs' },
+    { id: 'locking',      icon: Lock,      label: 'Lock Performance' },
+    { id: 'organization', icon: Building2, label: 'Organization' },
+    { id: 'leaves',       icon: FileText,  label: 'Leave Requests' },
+    { id: 'attendance',   icon: Clock,     label: 'Attendance' },
+    { id: 'birthdays',    icon: Gift,      label: 'Birthdays' },
+    { id: 'settings',     icon: Settings,  label: 'Settings' },
+  ];
+
+  const hrTabs = [
+    { id: 'dashboard',     icon: Home,      label: 'Dashboard' },
+    { id: 'employees',     icon: Users,     label: 'Employees' },
+    { id: 'attendance',    icon: Clock,     label: 'Attendance' },
+    { id: 'leaves',        icon: FileText,  label: 'Leave Requests' },
+    { id: 'birthdays',     icon: Gift,      label: 'Birthdays' },
+  ];
+
+  const managerTabs = [
+    { id: 'dashboard',     icon: Home,             label: 'Dashboard' },
+    { id: 'employees',     icon: Users,            label: 'My Department' },
+    { id: 'tasks',         icon: Target,           label: 'Task Management' },
+    { id: 'leaves',        icon: FileText,         label: 'Leave Requests' },
+    { id: 'attendance',    icon: Clock,            label: 'Attendance' },
+    { id: 'locking',       icon: Lock,             label: 'Lock Performance' },
+    { id: 'my-leaves',     icon: FileText,         label: 'My Leaves' },
+    { id: 'my-attendance', icon: Clock,            label: 'My Attendance' },
+    { id: 'birthdays',     icon: Gift,             label: 'Birthdays' },
   ];
 
   const teamLeadTabs = [
-    { id: 'dashboard', icon: Home, label: 'Dashboard' },
-    { id: 'tasks', icon: Shield, label: 'Team Tasks' },
-    { id: 'my-leaves', icon: FileText, label: 'My Leaves' },
-    { id: 'my-attendance', icon: Clock, label: 'My Attendance' },
-    { id: 'birthdays', icon: Gift, label: 'Birthdays' },
-    { id: 'adjust-targets', label: 'Adjust Targets', icon: SlidersHorizontal },
+    { id: 'dashboard',       icon: Home,              label: 'Dashboard' },
+    { id: 'my-team',         icon: Users,             label: 'My Team' },
+    { id: 'tasks',           icon: Shield,            label: 'Team Tasks' },
+    { id: 'my-leaves',       icon: FileText,          label: 'My Leaves' },
+    { id: 'my-attendance',   icon: Clock,             label: 'My Attendance' },
+    { id: 'birthdays',       icon: Gift,              label: 'Birthdays' },
+    { id: 'adjust-targets',  icon: SlidersHorizontal, label: 'Adjust Targets' },
   ];
 
   const employeeTabs = [
@@ -47,25 +75,36 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
 
   const tabs =
     user?.role === 'employer' ? employerTabs :
+    user?.role === 'hr'       ? hrTabs       :
+    user?.role === 'manager'  ? managerTabs  :
     user?.role === 'teamlead' ? teamLeadTabs :
     employeeTabs;
 
   const roleLabel =
-    user?.role === 'teamlead' ? 'Team Lead' : user?.role;
+    user?.role === 'teamlead' ? 'Team Lead' :
+    user?.role === 'manager'  ? 'Manager'   :
+    user?.role === 'hr'       ? 'HR'        :
+    user?.role;
 
   const activeColor =
-    user?.role === 'teamlead'
-      ? 'from-teal-600 to-teal-500'
-      : 'from-[#6B8DA2] to-[#6B8DA2]';
+    user?.role === 'teamlead' ? 'from-teal-600 to-teal-500'     :
+    user?.role === 'manager'  ? 'from-amber-600 to-amber-500'   :
+    user?.role === 'hr'       ? 'from-emerald-600 to-emerald-500' :
+    'from-[#6B8DA2] to-[#6B8DA2]';
 
   const activeHoverBg =
-    user?.role === 'teamlead'
-      ? 'rgba(20, 184, 166, 0.9)'
-      : 'rgba(245, 164, 44, 0.9)';
+    user?.role === 'teamlead' ? 'rgba(20, 184, 166, 0.9)'   :
+    user?.role === 'manager'  ? 'rgba(217, 119, 6, 0.9)'    :
+    user?.role === 'hr'       ? 'rgba(5, 150, 105, 0.9)'    :
+    'rgba(245, 164, 44, 0.9)';
+
+  // "dashboard" tab lives at "/" — everything else at "/<id>"
+  const tabPath = (id: string) => (id === 'dashboard' ? '/' : `/${id}`);
 
   const handleLogout = async () => {
     try {
       await logoutMutation.mutateAsync();
+      navigate('/');
       window.location.reload();
     } catch (error) {
       console.error('Logout failed:', error);
@@ -77,7 +116,7 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
       <motion.div
         initial={{ x: -100, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
-        className="w-64 sticky top-0 h-screen shrink-0 bg-gradient-to-b from-[#2C3E50] via-[#34495E] to-[#1A252F] p-4 flex items-center justify-center"
+        className="w-64 sticky top-0 h-screen shrink-0 bg-gradient-to-b from-[#2C3E50] via-[#34495E] to-[#1A252F] p-4 flex items-center justify-center overflow-hidden"
       >
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
       </motion.div>
@@ -89,7 +128,7 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
       initial={{ x: -100, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
-      className="w-64 sticky top-0 h-screen shrink-0 bg-gradient-to-b from-[#2C3E50] via-[#34495E] to-[#1A252F] p-4 flex flex-col shadow-2xl"
+      className="w-64 sticky top-0 h-screen shrink-0 bg-gradient-to-b from-[#2C3E50] via-[#34495E] to-[#1A252F] p-4 flex flex-col shadow-2xl overflow-hidden"
     >
       {/* Logo Section */}
       <motion.div
@@ -120,19 +159,50 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
           className="flex items-center gap-2 mx-2 mb-4 px-3 py-2 rounded-lg bg-teal-500/15 border border-teal-500/25 shrink-0"
         >
           <Shield className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-          <span className="text-teal-300 text-xs font-semibold">Team Lead Access</span>
+          <span className="text-teal-300 text-xs font-semibold truncate">
+            {user.department ? `${user.department}` : 'Team Lead'}
+          </span>
         </motion.div>
       )}
 
-      {/* Navigation — overflow-y-auto + min-h-0 lets it scroll without growing */}
-      <nav className="flex-1 space-y-1 overflow-y-auto min-h-0
-        [&::-webkit-scrollbar]:w-1
-        [&::-webkit-scrollbar-track]:transparent
-        [&::-webkit-scrollbar-thumb]:rounded-full
-        [&::-webkit-scrollbar-thumb]:bg-white/10">
+      {/* HR badge */}
+      {user.role === 'hr' && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="flex items-center gap-2 mx-2 mb-4 px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/25 shrink-0"
+        >
+          <Users className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span className="text-emerald-300 text-xs font-semibold">Human Resources</span>
+        </motion.div>
+      )}
+
+      {/* Manager department badge */}
+      {user.role === 'manager' && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="flex items-center gap-2 mx-2 mb-4 px-3 py-2 rounded-lg bg-amber-500/15 border border-amber-500/25 shrink-0"
+        >
+          <Building2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="text-amber-300 text-xs font-semibold truncate">
+            {user.department ? `${user.department}` : 'Department Manager'}
+          </span>
+        </motion.div>
+      )}
+
+      {/* Navigation — scrolls vertically when tabs overflow; no visible scrollbar */}
+      <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden min-h-0
+        [&::-webkit-scrollbar]:hidden
+        [-ms-overflow-style:none]
+        [scrollbar-width:none]">
         <AnimatePresence>
           {tabs.map((tab, index) => {
-            const isActive = activeTab === tab.id;
+            const isActive =
+              activeTab === tab.id ||
+              (tab.id === 'organization' && activeTab.startsWith('organization/'));
             return (
               <motion.button
                 key={tab.id}
@@ -144,7 +214,7 @@ const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
                   backgroundColor: isActive ? activeHoverBg : 'rgba(107, 141, 162, 0.2)'
                 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => navigate(tabPath(tab.id))}
                 className={`relative w-full cursor-pointer flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
                   isActive
                     ? `bg-gradient-to-r ${activeColor} text-white shadow-lg`

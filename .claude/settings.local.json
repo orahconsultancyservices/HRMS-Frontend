@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\shaik\\\\Desktop\\\\Programming\\\\Project\\\\orah-hrms\" -Recurse -Depth 2 -Directory)",
+      "Bash(Select-Object -First 30)",
+      "Bash(npx tsc *)",
+      "Bash(node --check src/middleware/authMiddleware.js)",
+      "Bash(node --check src/controllers/employeeController.js)",
+      "Bash(node --check src/controllers/leaveController.js)",
+      "Bash(cd /c/Users/shaik/Desktop/Programming/Project/backend-ocs-website && find . -type f -name \"package.json\" -o -name \"go.mod\" -o -name \"requirements.txt\" -o -name \"Gemfile\" | head -20)",
+      "Bash(npx prisma *)",
+      "Bash(not exist *)",
+      "PowerShell(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\shaik\\\\Desktop\\\\Programming\\\\Project\\\\orah-hrms\\\\src\\\\components\\\\hr\")",
+      "Bash(node --check src/controllers/authController.js)",
+      "Bash(node --check src/utils/departmentAccess.js)",
+      "Bash(node --check src/controllers/accessPermissionController.js)",
+      "Bash(dir \"C:\\\\Users\\\\shaik\\\\Desktop\\\\Programming\\\\Project\\\\backend\\\\src\")",
+      "Bash(curl -s http://localhost:5000/api/departments)",
+      "Bash(python -m json.tool)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\({deps: p.dependencies, devDeps: p.devDependencies}, null, 2\\)\\)\")",
+      "Bash(npm install *)",
+      "Bash(node -e \"require\\('react-router-dom'\\); console.log\\('installed'\\)\")",
+      "Bash(node -e \"const p = require\\('./src/lib/prisma'\\); console.log\\(typeof p.systemSettings\\)\")",
+      "Bash(node -e ' *)"
+    ]
+  }
+}
