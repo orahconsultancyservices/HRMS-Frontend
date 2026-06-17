@@ -110,6 +110,15 @@ export default function AdminDashboard({ currentUser }: AdminDashboardProps) {
     onError: (e: any) => notify(e.response?.data?.message || 'Failed to lock month', false)
   });
 
+  const generateSnapshotsMutation = useMutation({
+    mutationFn: async (data: any) => (await axios.post('/api/performance/monthly-performance/bulk-generate', data)).data,
+    onSuccess: (res: any) => {
+      queryClient.invalidateQueries({ queryKey: ['company-performance'] });
+      notify(res.message || `Snapshots generated for ${selectedMonth.month}/${selectedMonth.year}`, true);
+    },
+    onError: (e: any) => notify(e.response?.data?.message || 'Failed to generate snapshots', false)
+  });
+
   const depts = departments as Department[];
   const totalStats = {
     departments: depts.length,
@@ -151,6 +160,14 @@ export default function AdminDashboard({ currentUser }: AdminDashboardProps) {
           <p className="text-gray-400 text-sm ml-10">Company-wide management & analytics</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => generateSnapshotsMutation.mutate({ year: selectedMonth.year, month: selectedMonth.month })}
+            disabled={generateSnapshotsMutation.isPending}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition cursor-pointer disabled:opacity-50">
+            {generateSnapshotsMutation.isPending
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</>
+              : <><TrendingUp className="w-4 h-4" /> Generate Snapshots</>}
+          </button>
           <button onClick={() => setShowLockModal(true)}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-red-700 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition cursor-pointer">
             <Lock className="w-4 h-4" /> Lock Month
@@ -552,8 +569,185 @@ export default function AdminDashboard({ currentUser }: AdminDashboardProps) {
         )}
       </AnimatePresence>
 
-      {/* Suppress unused var warning */}
-      {(selectedDepartment || selectedDesignation) && <></>}
+      {/* ─── KPI Management Modal ─────────────────────────────────────────── */}
+      <AnimatePresence>
+        {selectedDesignation && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <motion.div initial={{ opacity: 0, scale: 0.92, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+              <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center">
+                    <Target className="w-5 h-5 text-violet-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Manage KPIs</h3>
+                    <p className="text-xs text-gray-400">{selectedDesignation.name}</p>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedDesignation(null)} className="p-2 hover:bg-gray-100 rounded-xl cursor-pointer">
+                  <X className="w-5 h-5 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto flex-1 p-5 space-y-4">
+                {/* Existing KPIs */}
+                <div className="space-y-2">
+                  {selectedDesignation.defaultKPIs.map(kpi => (
+                    <div key={kpi.id} className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                      <div className="flex items-center gap-3">
+                        <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${typeColors[kpi.type]}`}>{kpi.type}</span>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{kpi.metricName}</p>
+                          <p className="text-xs text-gray-400">{kpi.category} · Target: {kpi.defaultTarget} {kpi.unit}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Delete KPI "${kpi.metricName}"?`)) return;
+                          try {
+                            await departmentApi.deleteDefaultKPI(kpi.id);
+                            queryClient.invalidateQueries({ queryKey: ['departments'] });
+                            setSelectedDesignation(prev =>
+                              prev ? { ...prev, defaultKPIs: prev.defaultKPIs.filter(k => k.id !== kpi.id) } : null
+                            );
+                            notify('KPI deleted', true);
+                          } catch { notify('Failed to delete KPI', false); }
+                        }}
+                        className="p-1.5 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                      >
+                        <X className="w-4 h-4 text-red-400" />
+                      </button>
+                    </div>
+                  ))}
+                  {selectedDesignation.defaultKPIs.length === 0 && (
+                    <p className="text-sm text-gray-400 text-center py-4">No KPIs defined yet</p>
+                  )}
+                </div>
+
+                {/* Add New KPI form */}
+                <KPIAddForm
+                  designationId={selectedDesignation.id}
+                  onAdded={(newKPI) => {
+                    setSelectedDesignation(prev =>
+                      prev ? { ...prev, defaultKPIs: [...prev.defaultKPIs, newKPI] } : null
+                    );
+                    queryClient.invalidateQueries({ queryKey: ['departments'] });
+                    notify('KPI added successfully', true);
+                  }}
+                  onError={(msg) => notify(msg, false)}
+                />
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {selectedDepartment && <></>}
     </motion.div>
+  );
+}
+
+// ─── KPI Add Form (sub-component to keep state clean) ─────────────────────────
+function KPIAddForm({ designationId, onAdded, onError }: {
+  designationId: number;
+  onAdded: (kpi: any) => void;
+  onError: (msg: string) => void;
+}) {
+  const VALID_CATEGORIES = ['applications', 'interviews', 'assessments', 'calls', 'meetings', 'closures', 'screenings', 'submissions', 'placements'];
+  const [form, setForm] = useState({
+    metricName: '', type: 'daily', category: 'applications',
+    defaultTarget: '', unit: '', targetMin: '', targetMax: '', description: ''
+  });
+  const [saving, setSaving] = useState(false);
+
+  const handleAdd = async () => {
+    if (!form.metricName || !form.defaultTarget || !form.unit) {
+      onError('Please fill in Metric Name, Default Target, and Unit'); return;
+    }
+    setSaving(true);
+    try {
+      const res = await departmentApi.createDefaultKPI({
+        designationId,
+        metricName: form.metricName.trim(),
+        type: form.type,
+        category: form.category,
+        defaultTarget: parseInt(form.defaultTarget),
+        unit: form.unit.trim(),
+        targetMin: form.targetMin ? parseInt(form.targetMin) : undefined,
+        targetMax: form.targetMax ? parseInt(form.targetMax) : undefined,
+        description: form.description.trim() || undefined,
+        isActive: true,
+      });
+      const newKPI = res?.data || res;
+      onAdded(newKPI);
+      setForm({ metricName: '', type: 'daily', category: 'applications', defaultTarget: '', unit: '', targetMin: '', targetMax: '', description: '' });
+    } catch (e: any) {
+      onError(e?.response?.data?.message || 'Failed to add KPI');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-gray-100 pt-4">
+      <h4 className="text-sm font-bold text-gray-700 mb-3">Add New KPI</h4>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Metric Name *</label>
+          <input value={form.metricName} onChange={e => setForm(p => ({ ...p, metricName: e.target.value }))}
+            placeholder="e.g. Placements" className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-violet-400" />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Type *</label>
+          <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-violet-400 cursor-pointer">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Category *</label>
+          <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-violet-400 cursor-pointer">
+            {VALID_CATEGORIES.map(c => <option key={c} value={c} className="capitalize">{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Default Target *</label>
+          <input type="number" min="1" value={form.defaultTarget}
+            onChange={e => setForm(p => ({ ...p, defaultTarget: e.target.value }))}
+            placeholder="e.g. 10" className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-violet-400" />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Unit *</label>
+          <input value={form.unit} onChange={e => setForm(p => ({ ...p, unit: e.target.value }))}
+            placeholder="e.g. placements" className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-violet-400" />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Min Target</label>
+          <input type="number" min="0" value={form.targetMin}
+            onChange={e => setForm(p => ({ ...p, targetMin: e.target.value }))}
+            placeholder="Optional" className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-violet-400" />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Max Target</label>
+          <input type="number" min="0" value={form.targetMax}
+            onChange={e => setForm(p => ({ ...p, targetMax: e.target.value }))}
+            placeholder="Optional" className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-violet-400" />
+        </div>
+        <div className="col-span-2">
+          <label className="text-xs font-semibold text-gray-500 block mb-1">Description</label>
+          <input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+            placeholder="Optional description" className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-violet-400" />
+        </div>
+      </div>
+      <button onClick={handleAdd} disabled={saving}
+        className="mt-4 w-full py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl font-semibold text-sm hover:shadow-lg transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+        {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Adding…</> : <><Plus className="w-4 h-4" /> Add KPI</>}
+      </button>
+    </div>
   );
 }

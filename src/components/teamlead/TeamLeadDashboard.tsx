@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, TrendingUp, Target, AlertCircle,
   CheckCircle, Clock, Eye, Edit,
-  BarChart3, Calendar, Award, X, Loader2
+  BarChart3, Calendar, Award, X, Loader2,
+  ArrowRight, Filter
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
@@ -178,7 +179,82 @@ export default function TeamLeadDashboard({ currentUser }: TeamLeadDashboardProp
       </motion.div>
 
       {selectedView === 'overview' && (
-        <motion.div variants={iv} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <motion.div variants={iv} className="space-y-5">
+
+          {/* ── Conversion Ratios (recruitment funnel metrics) ── */}
+          {(() => {
+            const allTasks: Task[] = (teamTasks as any)?.tasks ?? [];
+            // Sum achieved per category across all team tasks
+            const catTotals: Record<string, number> = {};
+            allTasks.forEach(t => {
+              catTotals[t.category] = (catTotals[t.category] || 0) + t.achieved;
+            });
+            const screenings   = catTotals['screenings']   || 0;
+            const interviews   = catTotals['interviews']   || 0;
+            const submissions  = catTotals['submissions']  || 0;
+            const placements   = catTotals['placements']   || 0;
+            const applications = catTotals['applications'] || 0;
+
+            const safe = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
+            const ratios = [
+              { label: 'Apps → Screenings',    from: applications, to: screenings,  pct: safe(screenings, applications)  },
+              { label: 'Screenings → Interviews', from: screenings, to: interviews, pct: safe(interviews, screenings)    },
+              { label: 'Interviews → Submissions', from: interviews, to: submissions, pct: safe(submissions, interviews)  },
+              { label: 'Submissions → Placements', from: submissions, to: placements, pct: safe(placements, submissions)  },
+            ].filter(r => r.from > 0 || r.to > 0);
+
+            if (ratios.length === 0) return null;
+
+            return (
+              <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+                <div className="flex items-center gap-2 p-5 border-b border-gray-50">
+                  <Filter className="w-5 h-5 text-violet-500" />
+                  <h3 className="font-bold text-gray-800">Team Conversion Ratios</h3>
+                  <span className="ml-auto text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-lg">Cumulative (all tasks)</span>
+                </div>
+                <div className="p-5">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                    {[
+                      { label: 'Applications', value: applications, color: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
+                      { label: 'Screenings',   value: screenings,   color: 'bg-pink-50 text-pink-700 border-pink-100'       },
+                      { label: 'Interviews',   value: interviews,   color: 'bg-violet-50 text-violet-700 border-violet-100' },
+                      { label: 'Placements',   value: placements,   color: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+                    ].map(s => (
+                      <div key={s.label} className={`rounded-xl border p-3 text-center ${s.color}`}>
+                        <p className="text-2xl font-black">{s.value.toLocaleString()}</p>
+                        <p className="text-xs font-semibold opacity-70 mt-0.5">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-3">
+                    {ratios.map(r => (
+                      <div key={r.label} className="flex items-center gap-3">
+                        <p className="text-xs text-gray-500 w-44 shrink-0">{r.label}</p>
+                        <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(r.pct, 100)}%` }}
+                            transition={{ duration: 0.8 }}
+                            className={`h-2 rounded-full ${r.pct >= 60 ? 'bg-emerald-500' : r.pct >= 30 ? 'bg-amber-500' : 'bg-red-400'}`}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-xs text-gray-500">{r.from}</span>
+                          <ArrowRight className="w-3 h-3 text-gray-300" />
+                          <span className="text-xs font-bold text-gray-700">{r.to}</span>
+                          <span className={`text-xs font-black ml-1 ${r.pct >= 60 ? 'text-emerald-600' : r.pct >= 30 ? 'text-amber-600' : 'text-red-500'}`}>
+                            {r.pct}%
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
             <div className="flex items-center gap-2 p-5 border-b border-gray-50">
               <Users className="w-5 h-5 text-teal-500" />
@@ -240,6 +316,7 @@ export default function TeamLeadDashboard({ currentUser }: TeamLeadDashboardProp
               )}
             </div>
           </div>
+          </div>{/* end grid cols-1 lg:cols-2 */}
         </motion.div>
       )}
 

@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Target, TrendingUp, CheckCircle2, Clock, AlertCircle,
   BarChart3, ChevronDown, ChevronUp, Zap, Plus, X,
-  Calendar, Award, Activity, Flame,
+  Calendar, Award, Activity, Flame, TrendingDown, Minus,
 } from 'lucide-react';
 import { taskApi } from '../../services/taskApi';
 
@@ -439,7 +439,7 @@ const TaskCard = ({ task, achieved, tab, onLog }: TaskCardProps) => {
                     {todaySubs.map((s, i) => (
                       <div key={i} className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-gray-100 text-xs">
                         <span className="text-gray-400">
-                          {new Date(s.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                          {new Date(s.date).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: true })}
                         </span>
                         <span className="font-semibold text-[#6B8DA2]">+{s.count} {task.unit}</span>
                         {s.notes && <span className="text-gray-400 truncate max-w-[120px] ml-2">{s.notes}</span>}
@@ -507,6 +507,8 @@ const EmployeeKPIWidget = ({ employee }: EmployeeKPIWidgetProps) => {
   const [error, setError]         = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'today' | 'weekly' | 'monthly'>('today');
   const [logTask, setLogTask]     = useState<Task | null>(null);
+  const [monthlyHistory, setMonthlyHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const employeeId = employee.id
     ? Number(employee.id)
@@ -530,7 +532,23 @@ const EmployeeKPIWidget = ({ employee }: EmployeeKPIWidgetProps) => {
     }
   }, [employeeId]);
 
+  const loadMonthlyHistory = useCallback(async () => {
+    try {
+      setHistoryLoading(true);
+      const res = await taskApi.getMonthlyPerformance(employeeId);
+      const records = Array.isArray(res?.data) ? res.data : [];
+      // Sort ascending by year/month for the trend chart
+      records.sort((a: any, b: any) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+      setMonthlyHistory(records.slice(-6)); // last 6 months
+    } catch {
+      // silently fail — historical data is optional
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [employeeId]);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadMonthlyHistory(); }, [loadMonthlyHistory]);
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
@@ -818,6 +836,72 @@ const EmployeeKPIWidget = ({ employee }: EmployeeKPIWidgetProps) => {
           );
         })()}
       </motion.div>
+
+        {/* ── Month-over-Month Trend Chart ──────────────────────────────── */}
+        {monthlyHistory.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
+          >
+            <div className="flex items-center gap-2 mb-5">
+              <TrendingUp className="w-4 h-4 text-[#6B8DA2]" />
+              <h4 className="font-bold text-gray-800 text-sm">Month-over-Month Performance</h4>
+              <span className="text-xs text-gray-400 ml-auto">Last {monthlyHistory.length} months</span>
+            </div>
+            {/* Bar chart */}
+            <div className="flex items-end gap-2 h-28">
+              {monthlyHistory.map((rec: any, i: number) => {
+                const pct    = Math.min(Math.round(rec.achievementPercent || 0), 100);
+                const colors = progressColor(pct);
+                const monthLabel = new Date(rec.year, rec.month - 1, 1)
+                  .toLocaleDateString('en-US', { month: 'short' });
+                const isLatest = i === monthlyHistory.length - 1;
+                return (
+                  <div key={`${rec.year}-${rec.month}`} className="flex-1 flex flex-col items-center gap-1.5">
+                    <span className={`text-[10px] font-black ${colors.text}`}>{pct}%</span>
+                    <motion.div
+                      initial={{ height: 0 }}
+                      animate={{ height: `${Math.max(pct, 4)}%` }}
+                      transition={{ duration: 0.7, delay: i * 0.06 }}
+                      className={`w-full rounded-t-lg bg-gradient-to-t ${colors.bar} ${isLatest ? 'opacity-100' : 'opacity-60'}`}
+                      style={{ minHeight: 4 }}
+                    />
+                    <span className={`text-[10px] font-medium ${isLatest ? 'text-gray-700' : 'text-gray-400'}`}>{monthLabel}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Trend arrow */}
+            {monthlyHistory.length >= 2 && (() => {
+              const latest = monthlyHistory[monthlyHistory.length - 1];
+              const prev   = monthlyHistory[monthlyHistory.length - 2];
+              const delta  = Math.round((latest.achievementPercent || 0) - (prev.achievementPercent || 0));
+              return (
+                <div className="flex items-center gap-1.5 mt-4 pt-4 border-t border-gray-50">
+                  {delta > 0
+                    ? <TrendingUp  className="w-4 h-4 text-emerald-500" />
+                    : delta < 0
+                    ? <TrendingDown className="w-4 h-4 text-red-500" />
+                    : <Minus        className="w-4 h-4 text-gray-400" />}
+                  <span className={`text-xs font-semibold ${delta > 0 ? 'text-emerald-600' : delta < 0 ? 'text-red-500' : 'text-gray-500'}`}>
+                    {delta > 0 ? `+${delta}%` : `${delta}%`} vs last month
+                  </span>
+                  <span className="text-xs text-gray-400 ml-1">
+                    ({Math.round(latest.achievementPercent || 0)}% this month vs {Math.round(prev.achievementPercent || 0)}% last month)
+                  </span>
+                </div>
+              );
+            })()}
+          </motion.div>
+        )}
+        {historyLoading && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-[#6B8DA2]/30 border-t-[#6B8DA2] rounded-full animate-spin" />
+            <span className="text-sm text-gray-400">Loading performance history…</span>
+          </div>
+        )}
 
       {/* ── Log Progress Modal ───────────────────────────────────────────── */}
       <AnimatePresence>

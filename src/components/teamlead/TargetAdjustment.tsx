@@ -32,6 +32,25 @@ interface AdjustmentForm {
   newTarget: number;
 }
 
+// Task fields from the backend (originalTarget, adjustedDate, adjustedBy come from DB)
+interface AdjustedTask {
+  id: number;
+  title: string;
+  type: string;
+  category: string;
+  target: number;
+  originalTarget?: number;   // set when a target has been adjusted
+  adjustedDate?: string;
+  adjustedBy?: number;
+  assignedToId: number;
+  unit: string;
+  achieved: number;
+  status: string;
+  isLocked: boolean;
+  submissions?: any[];
+  notes?: string;
+}
+
 const ADJUSTMENT_REASONS = [
   'Employee exceeded baseline performance',
   'Market conditions changed',
@@ -255,10 +274,23 @@ const TargetAdjustment = ({ currentUser }: TargetAdjustmentProps) => {
   const [successMsg, setSuccessMsg] = useState('');
   const [adjustedTasks, setAdjustedTasks] = useState<Record<number, { newTarget: number; reason: string; adjustment: number }>>({});
 
+  // Build a set of team-member IDs (employees whose reportTo points to this team lead)
+  const teamMemberIds = useMemo(() => {
+    const raw = Array.isArray(rawEmployees) ? rawEmployees : [];
+    return new Set(
+      raw
+        .filter((e: any) => e.reportTo === currentUser.id)
+        .map((e: any) => e.id)
+    );
+  }, [rawEmployees, currentUser.id]);
+
   const tasks: any[] = useMemo(() => {
     const raw = Array.isArray(tasksRaw) ? tasksRaw : (tasksRaw as any)?.data || [];
-    return raw.filter((t: any) => t.assignedById === String(currentUser.id) || t.teamLeadId === currentUser.id);
-  }, [tasksRaw, currentUser.id]);
+    // Show tasks assigned TO a team member OR assigned BY this team lead
+    return raw.filter((t: any) =>
+      teamMemberIds.has(t.assignedToId) || t.assignedById === currentUser.id
+    );
+  }, [tasksRaw, currentUser.id, teamMemberIds]);
 
   const employeeMap = useMemo(() => {
     const raw = Array.isArray(rawEmployees) ? rawEmployees : [];
@@ -279,21 +311,23 @@ const TargetAdjustment = ({ currentUser }: TargetAdjustmentProps) => {
   }, [tasks, searchTerm, employeeMap]);
 
   const handleSaveAdjustment = async (form: AdjustmentForm) => {
-    try {
-      // Connect to backend:
-      // await taskApi.adjustTarget(form.taskId, form.adjustment, form.reason);
-      // Optimistic UI update:
-      setAdjustedTasks(prev => ({
-        ...prev,
-        [form.taskId]: { newTarget: form.newTarget, reason: form.reason, adjustment: form.adjustment }
-      }));
-      setSelectedTask(null);
-      setSuccessMsg(`Target adjusted to ${form.newTarget.toLocaleString()} (+${form.adjustment > 0 ? '+' : ''}${form.adjustment}%)`);
-      setTimeout(() => setSuccessMsg(''), 4000);
-      refetch();
-    } catch (e) {
-      throw e;
-    }
+    // Call the real backend: PUT /api/task-assignment/tasks/:taskId/adjust-target
+    await taskApi.adjustTarget(
+      form.taskId,
+      form.newTarget,
+      currentUser.id,
+      form.reason
+    );
+    // Optimistic UI update so the table reflects the new target immediately
+    setAdjustedTasks(prev => ({
+      ...prev,
+      [form.taskId]: { newTarget: form.newTarget, reason: form.reason, adjustment: form.adjustment }
+    }));
+    setSelectedTask(null);
+    setSuccessMsg(`Target adjusted to ${form.newTarget.toLocaleString()} (${form.adjustment > 0 ? '+' : ''}${form.adjustment}%)`);
+    setTimeout(() => setSuccessMsg(''), 4000);
+    // Refresh task list so the updated target is fetched from DB
+    refetch();
   };
 
   const cv = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
@@ -469,35 +503,70 @@ const TargetAdjustment = ({ currentUser }: TargetAdjustmentProps) => {
         )}
       </motion.div>
 
-      {/* Adjustment history */}
-      {Object.keys(adjustedTasks).length > 0 && (
-        <motion.div variants={iv} className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-gray-50">
-            <h3 className="font-bold text-gray-800 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-gray-400" /> Adjustment Log (This Session)
-            </h3>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {Object.entries(adjustedTasks).map(([taskId, adj]) => {
-              const task = tasks.find(t => t.id === parseInt(taskId));
-              const empName = task ? (employeeMap[task.assignedToId] ?? `Employee #${task.assignedToId}`) : 'Unknown';
-              const { text, bg } = getAdjustmentColor(adj.adjustment);
-              return (
-                <div key={taskId} className="p-4 flex items-center gap-4">
-                  <div className={`px-2.5 py-1 rounded-lg text-sm font-black border ${bg} ${text}`}>
-                    {adj.adjustment > 0 ? '+' : ''}{adj.adjustment}%
+      {/* Adjustment history — combines session adjustments + DB-persisted ones */}
+      {(() => {
+        // DB-persisted: tasks that have originalTarget set (already been adjusted)
+        const dbAdjusted = tasks.filter((t: any) => t.originalTarget != null && t.originalTarget !== t.target);
+        // Session adjustments not yet in DB list (freshly done this session)
+        const sessionOnly = Object.entries(adjustedTasks).filter(([taskId]) =>
+          !dbAdjusted.find(t => t.id === parseInt(taskId))
+        );
+        const hasHistory = dbAdjusted.length > 0 || sessionOnly.length > 0;
+        if (!hasHistory) return null;
+        return (
+          <motion.div variants={iv} className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-gray-50">
+              <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                <Clock className="w-5 h-5 text-gray-400" /> Adjustment Audit Log
+              </h3>
+              <p className="text-xs text-gray-400 mt-0.5">Persisted adjustments are pulled from the database. Reason is stored in task notes.</p>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {/* DB-persisted entries */}
+              {dbAdjusted.map((task: any) => {
+                const empName = employeeMap[task.assignedToId] ?? `Employee #${task.assignedToId}`;
+                const adjPct = task.originalTarget > 0
+                  ? Math.round(((task.target - task.originalTarget) / task.originalTarget) * 100)
+                  : 0;
+                const { text, bg } = getAdjustmentColor(adjPct);
+                return (
+                  <div key={task.id} className="p-4 flex items-center gap-4">
+                    <div className={`px-2.5 py-1 rounded-lg text-sm font-black border ${bg} ${text}`}>
+                      {adjPct > 0 ? '+' : ''}{adjPct}%
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">{task.title}</p>
+                      <p className="text-xs text-gray-400">
+                        {empName} · {task.originalTarget} → {task.target} {task.unit}
+                        {task.adjustedDate ? ` · ${new Date(task.adjustedDate).toLocaleDateString()}` : ''}
+                      </p>
+                    </div>
+                    <span className="text-xs text-teal-600 font-semibold bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-lg">Saved</span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800">{task?.title ?? `Task #${taskId}`}</p>
-                    <p className="text-xs text-gray-400">{empName} · New target: {adj.newTarget.toLocaleString()}</p>
+                );
+              })}
+              {/* Session-only entries (just done, not yet in DB list from tasks query) */}
+              {sessionOnly.map(([taskId, adj]) => {
+                const task = tasks.find(t => t.id === parseInt(taskId));
+                const empName = task ? (employeeMap[task.assignedToId] ?? `Employee #${task.assignedToId}`) : 'Unknown';
+                const { text, bg } = getAdjustmentColor(adj.adjustment);
+                return (
+                  <div key={taskId} className="p-4 flex items-center gap-4">
+                    <div className={`px-2.5 py-1 rounded-lg text-sm font-black border ${bg} ${text}`}>
+                      {adj.adjustment > 0 ? '+' : ''}{adj.adjustment}%
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">{task?.title ?? `Task #${taskId}`}</p>
+                      <p className="text-xs text-gray-400">{empName} · New target: {adj.newTarget.toLocaleString()} {task?.unit}</p>
+                    </div>
+                    <span className="text-xs text-blue-600 font-semibold bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-lg">This session</span>
                   </div>
-                  <p className="text-xs text-gray-400 max-w-xs truncate">{adj.reason}</p>
-                </div>
-              );
-            })}
-          </div>
-        </motion.div>
-      )}
+                );
+              })}
+            </div>
+          </motion.div>
+        );
+      })()}
 
       {/* Adjust Modal */}
       <AnimatePresence>

@@ -25,6 +25,7 @@ import OrganizationManagement from './components/management/OrganizationManageme
 import DepartmentDetailPage from './components/management/DepartmentDetailPage';
 import SettingsPage from './components/management/SettingsPage';
 import HRDashboard from './components/hr/HRDashboard';
+import AnalyticsDashboard from './components/employer/AnalyticsDashboard';
 
 // ─── Route map (tab-id → URL path) ───────────────────────────────────────────
 // Convention: "dashboard" lives at "/" so the root URL always shows the dashboard.
@@ -151,6 +152,7 @@ function AppContent() {
         case 'attendance':   return <AttendancePage />;
         case 'birthdays':    return <BirthdaysPage />;
         case 'tasks':        return <UniversalTaskManagement currentUser={currentUserForTask} />;
+        case 'analytics':    return <AnalyticsDashboard />;
         case 'sales':
           return (
             <SalesDashboard
@@ -181,6 +183,7 @@ function AppContent() {
       switch (activeTab) {
         case 'dashboard':  return <HRDashboard />;
         case 'employees':  return <EmployeesPage />;
+        case 'analytics':  return <AnalyticsDashboard currentUser={{ id: user.id, name: user.name, role: 'hr', department: user.department }} />;
         case 'attendance': return <AttendancePage />;
         case 'leaves':     return <LeavesPage leaveTypes={leaveTypes} setLeaveTypes={setLeaveTypes} />;
         case 'birthdays':  return <BirthdaysPage />;
@@ -200,6 +203,7 @@ function AppContent() {
             />
           );
         case 'tasks':        return <UniversalTaskManagement currentUser={currentUserForTask} />;
+        case 'analytics':    return <AnalyticsDashboard currentUser={{ id: user.id, name: user.name, role: 'manager', department: user.department }} />;
         case 'employees':    return <EmployeesPage />;
         case 'leaves':       return <LeavesPage leaveTypes={leaveTypes} setLeaveTypes={setLeaveTypes} />;
         case 'attendance':   return <AttendancePage />;
@@ -232,6 +236,7 @@ function AppContent() {
           );
         case 'my-team':        return <EmployeesPage />;
         case 'tasks':          return <UniversalTaskManagement currentUser={currentUserForTask} />;
+        case 'analytics':      return <AnalyticsDashboard currentUser={{ id: user.id, name: user.name, role: 'teamlead', department: user.department }} />;
         case 'my-leaves':
           return (
             <MyLeavesPage

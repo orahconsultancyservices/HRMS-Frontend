@@ -6,6 +6,7 @@ import {
   SlidersHorizontal,
   Building2,
   Settings,
+  BarChart3,
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCurrentUser, useLogout } from '../../hooks/useAuth';
@@ -26,6 +27,7 @@ const Sidebar = () => {
     { id: 'dashboard',    icon: Home,      label: 'Dashboard' },
     { id: 'employees',    icon: Users,     label: 'Employees' },
     { id: 'tasks',        icon: Target,    label: 'Task Management' },
+    { id: 'analytics',    icon: BarChart3, label: 'Analytics' },
     { id: 'sales',        icon: DollarSign,label: 'Sales KPIs' },
     { id: 'locking',      icon: Lock,      label: 'Lock Performance' },
     { id: 'organization', icon: Building2, label: 'Organization' },
@@ -38,6 +40,7 @@ const Sidebar = () => {
   const hrTabs = [
     { id: 'dashboard',     icon: Home,      label: 'Dashboard' },
     { id: 'employees',     icon: Users,     label: 'Employees' },
+    { id: 'analytics',     icon: BarChart3, label: 'Analytics' },
     { id: 'attendance',    icon: Clock,     label: 'Attendance' },
     { id: 'leaves',        icon: FileText,  label: 'Leave Requests' },
     { id: 'birthdays',     icon: Gift,      label: 'Birthdays' },
@@ -47,6 +50,7 @@ const Sidebar = () => {
     { id: 'dashboard',     icon: Home,             label: 'Dashboard' },
     { id: 'employees',     icon: Users,            label: 'My Department' },
     { id: 'tasks',         icon: Target,           label: 'Task Management' },
+    { id: 'analytics',     icon: BarChart3,        label: 'Analytics' },
     { id: 'leaves',        icon: FileText,         label: 'Leave Requests' },
     { id: 'attendance',    icon: Clock,            label: 'Attendance' },
     { id: 'locking',       icon: Lock,             label: 'Lock Performance' },
@@ -59,6 +63,7 @@ const Sidebar = () => {
     { id: 'dashboard',       icon: Home,              label: 'Dashboard' },
     { id: 'my-team',         icon: Users,             label: 'My Team' },
     { id: 'tasks',           icon: Shield,            label: 'Team Tasks' },
+    { id: 'analytics',       icon: BarChart3,         label: 'Team Analytics' },
     { id: 'my-leaves',       icon: FileText,          label: 'My Leaves' },
     { id: 'my-attendance',   icon: Clock,             label: 'My Attendance' },
     { id: 'birthdays',       icon: Gift,              label: 'Birthdays' },

@@ -545,7 +545,7 @@ const TaskManagement = ({ employee }: TaskManagementProps) => {
                       <tr key={sub.id} className="hover:bg-gray-50 transition">
                         <td className="px-5 py-3">
                           <p className="text-sm font-medium text-gray-700">{new Date(sub.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
-                          <p className="text-xs text-gray-400">{new Date(sub.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
+                          <p className="text-xs text-gray-400">{new Date(sub.date).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })}</p>
                         </td>
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-2">

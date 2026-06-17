@@ -93,6 +93,7 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     try {
       const date = new Date(dateTime);
       return date.toLocaleTimeString('en-US', {
+        timeZone: 'America/New_York', // always display in EST/EDT
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
@@ -107,6 +108,7 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
     try {
       const date = new Date(dateStr);
       return date.toLocaleDateString('en-US', {
+        timeZone: 'America/New_York',
         weekday: 'short',
         month: 'short',
         day: 'numeric',
@@ -121,7 +123,7 @@ const MyAttendancePage = ({ employee }: MyAttendanceProps) => {
   const getDayName = (dateStr: string) => {
     try {
       const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { weekday: 'short' });
+      return date.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'short' });
     } catch (error) {
       return '';
     }

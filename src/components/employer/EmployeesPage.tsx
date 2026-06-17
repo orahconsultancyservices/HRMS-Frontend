@@ -154,35 +154,35 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
           <label className="block text-gray-700 font-medium mb-2">First Name *</label>
           <input type="text" value={newEmployee.firstName}
             onChange={(e) => setNewEmployee({ ...newEmployee, firstName: e.target.value })}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
             placeholder="Enter First Name" />
         </div>
         <div>
           <label className="block text-gray-700 font-medium mb-2">Last Name *</label>
           <input type="text" value={newEmployee.lastName}
             onChange={(e) => setNewEmployee({ ...newEmployee, lastName: e.target.value })}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
             placeholder="Enter Last Name" />
         </div>
         <div>
           <label className="block text-gray-700 font-medium mb-2">Employee ID *</label>
           <input type="text" value={newEmployee.employeeId}
             onChange={(e) => setNewEmployee({ ...newEmployee, employeeId: e.target.value })}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
             placeholder="e.g., O-001" />
         </div>
         <div>
           <label className="block text-gray-700 font-medium mb-2">Personal Email *</label>
           <input type="email" value={newEmployee.email}
             onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
             placeholder="Enter personal email" />
         </div>
         <div>
           <label className="block text-gray-700 font-medium mb-2">Organization Email *</label>
           <input type="email" value={newEmployee.orgEmail}
             onChange={(e) => setNewEmployee({ ...newEmployee, orgEmail: e.target.value })}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
             placeholder="Enter organization email" />
         </div>
         <div>
@@ -192,7 +192,7 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
               type={showOrgPassword ? 'text' : 'password'}
               value={newEmployee.orgPassword}
               onChange={(e) => setNewEmployee({ ...newEmployee, orgPassword: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 pr-16"
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 pr-16"
               placeholder="Enter organization password" />
             <button type="button" onClick={() => setShowOrgPassword(!showOrgPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm cursor-pointer">
@@ -204,7 +204,7 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
           <label className="block text-gray-700 font-medium mb-2">Personal Phone Number</label>
           <input type="tel" value={newEmployee.phone}
             onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
             placeholder="Enter personal phone number" />
         </div>
 
@@ -221,7 +221,7 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
                   setNewEmployee({ ...newEmployee, department: e.target.value });
                 }
               }}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer">
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer">
               <option value="">Select Department</option>
               {departments.map(d => <option key={d} value={d}>{d}</option>)}
               <option value="custom" className="text-purple-600 font-medium">+ Create New Department</option>
@@ -256,7 +256,7 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
                   setNewEmployee({ ...newEmployee, position: e.target.value });
                 }
               }}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer">
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer">
               <option value="">Select Designation</option>
               {positions.map(p => <option key={p} value={p}>{p}</option>)}
               <option value="custom" className="text-purple-600 font-medium">+ Create New Designation</option>
@@ -286,9 +286,12 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
           <DatePicker selected={newEmployee.birthday}
             onChange={(date: Date | null) => setNewEmployee({ ...newEmployee, birthday: date })}
             dateFormat="MMMM d, yyyy"
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer"
-            placeholderText="Select date of birth" showYearDropdown scrollableYearDropdown
-            yearDropdownItemNumber={100} maxDate={new Date()} isClearable />
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer"
+            wrapperClassName="w-full"
+            placeholderText="Select date of birth"
+            showMonthDropdown showYearDropdown dropdownMode="select"
+            scrollableYearDropdown yearDropdownItemNumber={100}
+            maxDate={new Date()} isClearable fixedHeight />
           <p className="text-sm text-gray-500 mt-1">Used for birthday reminders</p>
         </div>
 
@@ -297,29 +300,37 @@ const EmployeeInfoTab: React.FC<EmployeeInfoTabProps> = ({
           <DatePicker selected={newEmployee.joinDate}
             onChange={(date: Date | null) => setNewEmployee({ ...newEmployee, joinDate: date })}
             dateFormat="MMMM d, yyyy"
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer"
-            placeholderText="Select join date" />
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer"
+            wrapperClassName="w-full"
+            placeholderText="Select join date"
+            showMonthDropdown showYearDropdown dropdownMode="select"
+            scrollableYearDropdown yearDropdownItemNumber={80}
+            fixedHeight />
         </div>
         <div>
           <label className="block text-gray-700 font-medium mb-2">Leave Date</label>
           <DatePicker selected={newEmployee.leaveDate}
             onChange={(date: Date | null) => setNewEmployee({ ...newEmployee, leaveDate: date })}
             dateFormat="MMMM d, yyyy"
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer"
-            placeholderText="Select leave date (optional)" isClearable />
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 bg-white cursor-pointer"
+            wrapperClassName="w-full"
+            placeholderText="Select leave date (optional)"
+            showMonthDropdown showYearDropdown dropdownMode="select"
+            scrollableYearDropdown yearDropdownItemNumber={80}
+            isClearable fixedHeight />
         </div>
         <div>
           <label className="block text-gray-700 font-medium mb-2">Location</label>
           <input type="text" value={newEmployee.location}
             onChange={(e) => setNewEmployee({ ...newEmployee, location: e.target.value })}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
             placeholder="Enter location" />
         </div>
         <div>
           <label className="block text-gray-700 font-medium mb-2">Emergency Contact</label>
           <input type="text" value={newEmployee.emergencyContact}
             onChange={(e) => setNewEmployee({ ...newEmployee, emergencyContact: e.target.value })}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
             placeholder="Enter emergency contact" />
         </div>
       </div>
@@ -715,7 +726,7 @@ const EmployeeAttendanceTab: React.FC<{ employee: Employee }> = ({ employee }) =
   };
   const formatTime = (dt: string | null) => {
     if (!dt) return '--:--';
-    return new Date(dt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return new Date(dt).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false });
   };
   const formatHours = (h: number | null) => {
     if (!h) return '--';

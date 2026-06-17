@@ -21,7 +21,13 @@
       "Bash(npm install *)",
       "Bash(node -e \"require\\('react-router-dom'\\); console.log\\('installed'\\)\")",
       "Bash(node -e \"const p = require\\('./src/lib/prisma'\\); console.log\\(typeof p.systemSettings\\)\")",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(node --check src/controllers/taskAssignmentController.js)",
+      "Bash(node --check src/controllers/taskController.js)",
+      "Bash(node --check src/controllers/performanceController.js)",
+      "Bash(npx vite *)",
+      "Bash(xargs grep -l -i \"punchIn\\\\|punch_in\\\\|loginTime\\\\|login_time\\\\|checkIn\\\\|check_in\\\\|clockIn\\\\|clock_in\")",
+      "Bash(grep -E \"\\\\.\\(ts|tsx|js|jsx\\)$\")"
     ]
   }
 }

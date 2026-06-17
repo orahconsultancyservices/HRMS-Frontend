@@ -206,4 +206,28 @@ export const taskApi = {
     const response = await api.get('/performance/company/performance', { params });
     return response.data;
   },
+
+  // ── Team Lead Target Adjustment ─────────────────────────────────────────
+  adjustTarget: async (taskId: number, newTarget: number, adjustedBy: number, reason?: string) => {
+    const response = await api.put(`/task-assignment/tasks/${taskId}/adjust-target`, {
+      newTarget,
+      adjustedBy,
+      reason: reason || '',
+    });
+    return response.data;
+  },
+
+  // Get adjustment history for a task
+  getAdjustmentHistory: async (taskId: number) => {
+    const response = await api.get(`/task-assignment/tasks/${taskId}/adjustment-history`);
+    return response.data;
+  },
+
+  // Get team tasks (for team lead)
+  getTeamTasks: async (teamLeadId: number, params?: any) => {
+    const response = await api.get('/task-assignment/team/tasks', {
+      params: { teamLeadId, ...params }
+    });
+    return response.data;
+  },
 };

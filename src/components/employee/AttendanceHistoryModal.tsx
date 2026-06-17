@@ -22,6 +22,7 @@ const AttendanceHistoryModal = ({
     if (!dateTime) return '--:--';
     try {
       return new Date(dateTime).toLocaleTimeString('en-US', {
+        timeZone: 'America/New_York', // always display in EST/EDT
         hour: '2-digit',
         minute: '2-digit',
         hour12: true

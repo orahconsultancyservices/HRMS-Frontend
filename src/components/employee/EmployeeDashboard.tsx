@@ -52,6 +52,13 @@ const EmployeeDashboard = ({ employee }: EmployeeDashboardProps) => {
   const [activeBreakId, setActiveBreakId] = useState<number | null>(null);
   const [todayAttendance, setTodayAttendance] = useState<any>(null);
 
+  // ── 1-second tick to drive live clocks ─────────────────────────────────────
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const getEmployeeIdNumber = () => {
     try {
       if (employee.id) return parseInt(employee.id.toString());
@@ -292,6 +299,66 @@ const EmployeeDashboard = ({ employee }: EmployeeDashboardProps) => {
   const isActive       = canPunchOut && !isOnBreak;
   const isBreakActive  = isOnBreak;
 
+  // ── Live working-hours clock ────────────────────────────────────────────────
+  // Ticks every second while clocked in, pauses during breaks, freezes on punch-out
+  const getLiveWorkingDisplay = () => {
+    if (!hasPunchedIn) return '--';
+    if (hasPunchedOut) return formatHoursForDisplay(todayAttendance?.totalHours);
+
+    const elapsed = Math.floor((Date.now() - new Date(todayAttendance.checkIn).getTime()) / 1000);
+
+    // Subtract all break time so the clock pauses during breaks
+    let breakSecs = 0;
+    if (breaks.length > 0) {
+      for (const brk of breaks) {
+        if (brk.status === 'completed') {
+          breakSecs += (brk.duration || 0) * 60;
+        } else if (brk.status === 'active' && brk.startTime) {
+          // Active break grows at same rate as elapsed → net stays frozen
+          breakSecs += Math.floor((Date.now() - new Date(brk.startTime).getTime()) / 1000);
+        }
+      }
+    } else {
+      // Fallback: use stored break minutes from API
+      breakSecs = (todayAttendance?.breaks || 0) * 60;
+    }
+
+    const netSecs = Math.max(0, elapsed - breakSecs);
+    const h = Math.floor(netSecs / 3600);
+    const m = Math.floor((netSecs % 3600) / 60);
+    const s = netSecs % 60;
+    return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+  };
+
+  // ── Live break-duration clock ───────────────────────────────────────────────
+  // Ticks while a break is active, shows static total after break ends
+  const getLiveBreakDisplay = () => {
+    let totalSecs = 0;
+    if (breaks.length > 0) {
+      for (const brk of breaks) {
+        if (brk.status === 'completed') {
+          totalSecs += (brk.duration || 0) * 60;
+        } else if (brk.status === 'active' && brk.startTime) {
+          totalSecs += Math.floor((Date.now() - new Date(brk.startTime).getTime()) / 1000);
+        }
+      }
+    } else {
+      totalSecs = (todayAttendance?.breaks || 0) * 60;
+    }
+    if (totalSecs === 0) return '0m';
+    const h = Math.floor(totalSecs / 3600);
+    const m = Math.floor((totalSecs % 3600) / 60);
+    const s = totalSecs % 60;
+    // Show seconds precision only while a break is in progress
+    if (isOnBreak) {
+      if (h === 0) return `${m}m ${String(s).padStart(2, '0')}s`;
+      return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+    }
+    // Static after break ends
+    if (h === 0) return `${m}m`;
+    return `${h}h ${m}m`;
+  };
+
   const getStatusText = () => {
     if (workCompleted)  return 'Work completed for today! 🎉';
     if (isBreakActive)  return 'On Break — Enjoy your coffee! ☕';
@@ -475,11 +542,13 @@ const EmployeeDashboard = ({ employee }: EmployeeDashboardProps) => {
 
                   {/* Break info */}
                   <div className="text-center">
-                    <p className="text-sm text-white/80">Break Time</p>
-                    <p className="text-xl font-bold mt-1">
-                      {formatBreakDuration(totalBreakTime)}
+                    <p className="text-sm text-white/80 flex items-center justify-center gap-1">
+                      Break Time
+                      {isOnBreak && <span className="inline-block w-1.5 h-1.5 rounded-full bg-yellow-300 animate-pulse" />}
                     </p>
-                    {/* ── This is the key line: always reads totalBreakCount ── */}
+                    <p className="text-xl font-bold mt-1 tabular-nums">
+                      {getLiveBreakDisplay()}
+                    </p>
                     <p className="text-xs text-white/70 mt-1">
                       {totalBreakCount > 0
                         ? `${totalBreakCount} break${totalBreakCount !== 1 ? 's' : ''} taken`
@@ -491,9 +560,12 @@ const EmployeeDashboard = ({ employee }: EmployeeDashboardProps) => {
 
                   {/* Working hours */}
                   <div className="text-center">
-                    <p className="text-sm text-white/80">Working Hours</p>
-                    <p className="text-xl font-bold mt-1">
-                      {todayAttendance?.totalHours ? formatHoursForDisplay(todayAttendance.totalHours) : '--'}
+                    <p className="text-sm text-white/80 flex items-center justify-center gap-1">
+                      Working Hours
+                      {hasPunchedIn && !hasPunchedOut && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-300 animate-pulse" />}
+                    </p>
+                    <p className="text-xl font-bold mt-1 tabular-nums">
+                      {getLiveWorkingDisplay()}
                     </p>
                   </div>
 
